@@ -1,0 +1,237 @@
+@import "tailwindcss";
+
+@theme {
+  --color-sidebar-bg: rgba(246, 246, 248, 0.85);
+  --color-sidebar-border: rgba(0, 0, 0, 0.08);
+  --color-header-bg: rgba(255, 255, 255, 0.85);
+  --color-chat-bg: #fafafa;
+  --color-text-primary: #1d1d1f;
+  --color-text-secondary: #86868b;
+  --color-accent: #007aff;
+  --color-hover: rgba(0, 0, 0, 0.04);
+  --color-surface: #ffffff;
+  --titlebar-height: 52px;
+  --traffic-light-width: 76px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-sidebar-bg: rgba(30, 30, 32, 0.85);
+    --color-sidebar-border: rgba(255, 255, 255, 0.08);
+    --color-header-bg: rgba(28, 28, 30, 0.85);
+    --color-chat-bg: #161617;
+    --color-text-primary: #f5f5f7;
+    --color-text-secondary: #98989d;
+    --color-accent: #0a84ff;
+    --color-hover: rgba(255, 255, 255, 0.06);
+    --color-surface: #1c1c1e;
+  }
+}
+
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+}
+
+@layer base {
+  html, body, #root {
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--color-text-primary);
+    background-color: var(--color-chat-bg);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection {
+    background: rgba(0, 122, 255, 0.2);
+  }
+
+  /* Prevent text selection on UI chrome */
+  button, label, header, aside {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  textarea, input {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+}
+
+/* Markdown prose styles for chat messages */
+@layer components {
+  .prose-chat {
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--color-text-primary);
+  }
+
+  .prose-chat h1,
+  .prose-chat h2,
+  .prose-chat h3,
+  .prose-chat h4 {
+    font-weight: 600;
+    margin-top: 1.2em;
+    margin-bottom: 0.4em;
+    line-height: 1.3;
+  }
+
+  .prose-chat h1 { font-size: 1.25em; }
+  .prose-chat h2 { font-size: 1.15em; }
+  .prose-chat h3 { font-size: 1.05em; }
+  .prose-chat h4 { font-size: 1em; }
+
+  .prose-chat > *:first-child {
+    margin-top: 0;
+  }
+
+  .prose-chat p {
+    margin-top: 0.6em;
+    margin-bottom: 0.6em;
+  }
+
+  .prose-chat > p:first-child {
+    margin-top: 0;
+  }
+
+  .prose-chat strong {
+    font-weight: 600;
+  }
+
+  .prose-chat em {
+    font-style: italic;
+  }
+
+  .prose-chat ul,
+  .prose-chat ol {
+    margin-top: 0.4em;
+    margin-bottom: 0.4em;
+    padding-left: 1.5em;
+  }
+
+  .prose-chat ul {
+    list-style-type: disc;
+  }
+
+  .prose-chat ol {
+    list-style-type: decimal;
+  }
+
+  .prose-chat li {
+    margin-top: 0.2em;
+    margin-bottom: 0.2em;
+  }
+
+  .prose-chat li > ul,
+  .prose-chat li > ol {
+    margin-top: 0.15em;
+    margin-bottom: 0.15em;
+  }
+
+  .prose-chat code {
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+    font-size: 0.9em;
+    padding: 0.15em 0.35em;
+    border-radius: 4px;
+    background: var(--color-hover);
+    border: 1px solid var(--color-sidebar-border);
+  }
+
+  .prose-chat pre {
+    margin-top: 0.8em;
+    margin-bottom: 0.8em;
+    padding: 0.75em 1em;
+    border-radius: 8px;
+    background: var(--color-hover);
+    border: 1px solid var(--color-sidebar-border);
+    overflow-x: auto;
+  }
+
+  .prose-chat pre code {
+    padding: 0;
+    border: none;
+    background: none;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .prose-chat blockquote {
+    margin-top: 0.6em;
+    margin-bottom: 0.6em;
+    padding-left: 1em;
+    border-left: 3px solid var(--color-accent);
+    color: var(--color-text-secondary);
+  }
+
+  .prose-chat hr {
+    margin-top: 1em;
+    margin-bottom: 1em;
+    border: none;
+    border-top: 1px solid var(--color-sidebar-border);
+  }
+
+  .prose-chat table {
+    width: 100%;
+    margin-top: 0.6em;
+    margin-bottom: 0.6em;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+
+  .prose-chat th,
+  .prose-chat td {
+    padding: 0.4em 0.75em;
+    border: 1px solid var(--color-sidebar-border);
+    text-align: left;
+  }
+
+  .prose-chat th {
+    font-weight: 600;
+    background: var(--color-hover);
+  }
+
+  .prose-chat a {
+    color: var(--color-accent);
+    text-decoration: none;
+  }
+
+  .prose-chat a:hover {
+    text-decoration: underline;
+  }
+}
+
+/* macOS-style thin scrollbars — these must be unlayered (pseudo-elements) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.12);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.22);
+}
+
+@media (prefers-color-scheme: dark) {
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.12);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.22);
+  }
+}
