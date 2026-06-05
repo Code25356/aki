@@ -60,7 +60,7 @@ export function rsiArray(closes: number[], period: number = 14): number[] {
   avgGain /= period;
   avgLoss /= period;
 
-  result.push(avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss));
+  result.push(avgLoss === 0 ? (avgGain === 0 ? 50 : 100) : 100 - 100 / (1 + avgGain / avgLoss));
 
   // Smoothed
   for (let i = period + 1; i < closes.length; i++) {
@@ -69,7 +69,7 @@ export function rsiArray(closes: number[], period: number = 14): number[] {
     const loss = diff < 0 ? Math.abs(diff) : 0;
     avgGain = (avgGain * (period - 1) + gain) / period;
     avgLoss = (avgLoss * (period - 1) + loss) / period;
-    result.push(avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss));
+    result.push(avgLoss === 0 ? (avgGain === 0 ? 50 : 100) : 100 - 100 / (1 + avgGain / avgLoss));
   }
 
   return result;
@@ -77,7 +77,7 @@ export function rsiArray(closes: number[], period: number = 14): number[] {
 
 export function rsi(closes: number[], period: number = 14): number {
   const arr = rsiArray(closes, period);
-  return arr[arr.length - 1] || 50;
+  return arr.length > 0 ? arr[arr.length - 1] : 50;
 }
 
 // ─── MACD ───────────────────────────────────────────────────────
