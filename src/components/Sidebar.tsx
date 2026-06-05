@@ -2,16 +2,20 @@ import { useEffect, useState, useMemo } from "react";
 import {
   MessageSquare,
   Brain,
+  BookOpen,
+  FileEdit,
   PanelLeftClose,
   PanelLeft,
   Plus,
   Trash2,
   Search,
   X,
+  Mic,
 } from "lucide-react";
 import { useChatStore } from "../store/chatStore";
+import { useCanvasStore } from "../store/canvasStore";
 
-export type AppView = "chats" | "brain";
+export type AppView = "chats" | "brain" | "docs" | "canvas" | "meeting";
 
 interface SidebarProps {
   collapsed: boolean;
@@ -40,6 +44,15 @@ export default function Sidebar({ collapsed, onToggle, activeView, onViewChange 
     loadThreadList,
   } = useChatStore();
 
+  const {
+    canvases,
+    currentCanvasId,
+    loadCanvasList,
+    loadCanvas,
+    deleteCanvas: deleteCanvasItem,
+    newCanvas,
+  } = useCanvasStore();
+
   const [searchQuery, setSearchQuery] = useState("");
 
   const filteredThreads = useMemo(() => {
@@ -53,7 +66,8 @@ export default function Sidebar({ collapsed, onToggle, activeView, onViewChange 
 
   useEffect(() => {
     loadThreadList();
-  }, [loadThreadList]);
+    loadCanvasList();
+  }, [loadThreadList, loadCanvasList]);
 
   return (
     <aside
@@ -66,39 +80,75 @@ export default function Sidebar({ collapsed, onToggle, activeView, onViewChange 
       <div className="shrink-0" style={{ height: "calc(var(--titlebar-height) + 4px)" }} />
 
       {/* Nav tabs */}
-      <div className="flex items-center gap-2 px-5 pb-3">
+      <div className="flex items-center gap-1 px-3 pb-3 overflow-hidden">
         <button
           onClick={() => onViewChange("chats")}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium
-                     transition-colors cursor-pointer
+          className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-[12px] font-medium
+                     transition-colors cursor-pointer shrink-0
                      ${activeView === "chats"
                        ? "bg-[var(--color-hover)] text-[var(--color-text-primary)]"
                        : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
                      }`}
         >
-          <MessageSquare size={14} />
+          <MessageSquare size={13} />
           Chats
         </button>
         <button
           onClick={() => onViewChange("brain")}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium
-                     transition-colors cursor-pointer
+          className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-[12px] font-medium
+                     transition-colors cursor-pointer shrink-0
                      ${activeView === "brain"
                        ? "bg-[var(--color-hover)] text-[var(--color-text-primary)]"
                        : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
                      }`}
         >
-          <Brain size={14} />
+          <Brain size={13} />
           Brain
+        </button>
+        <button
+          onClick={() => onViewChange("docs")}
+          className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-[12px] font-medium
+                     transition-colors cursor-pointer shrink-0
+                     ${activeView === "docs"
+                       ? "bg-[var(--color-hover)] text-[var(--color-text-primary)]"
+                       : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+                     }`}
+        >
+          <BookOpen size={13} />
+          Docs
+        </button>
+        <button
+          onClick={() => onViewChange("canvas")}
+          className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-[12px] font-medium
+                     transition-colors cursor-pointer shrink-0
+                     ${activeView === "canvas"
+                       ? "bg-[var(--color-hover)] text-[var(--color-text-primary)]"
+                       : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+                     }`}
+        >
+          <FileEdit size={13} />
+          Canvas
+        </button>
+        <button
+          onClick={() => onViewChange("meeting")}
+          className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-[12px] font-medium
+                     transition-colors cursor-pointer shrink-0
+                     ${activeView === "meeting"
+                       ? "bg-[var(--color-hover)] text-[var(--color-text-primary)]"
+                       : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+                     }`}
+        >
+          <Mic size={13} />
+          Meet
         </button>
         <div className="flex-1" />
         <button
           onClick={onToggle}
-          className="p-1.5 rounded-lg text-[var(--color-text-secondary)]
-                     hover:bg-[var(--color-hover)] transition-colors cursor-pointer"
+          className="p-1 rounded-lg text-[var(--color-text-secondary)]
+                     hover:bg-[var(--color-hover)] transition-colors cursor-pointer shrink-0"
           title="Collapse sidebar"
         >
-          <PanelLeftClose size={15} />
+          <PanelLeftClose size={14} />
         </button>
       </div>
 
@@ -203,9 +253,68 @@ export default function Sidebar({ collapsed, onToggle, activeView, onViewChange 
               </p>
             )}
           </div>
+        ) : activeView === "canvas" ? (
+          <div className="space-y-0.5">
+            <button
+              onClick={() => { newCanvas(); onViewChange("canvas"); }}
+              className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-[13px]
+                         text-[var(--color-accent)] font-medium
+                         hover:bg-[var(--color-hover)]
+                         transition-colors cursor-pointer"
+            >
+              <Plus size={15} strokeWidth={2.5} />
+              New Canvas
+            </button>
+
+            {canvases.length > 0 && (
+              <div className="h-px bg-[var(--color-sidebar-border)] my-1.5" />
+            )}
+
+            {canvases.map((canvas) => (
+              <div
+                key={canvas.id}
+                className={`group flex items-center rounded-lg transition-colors
+                  ${currentCanvasId === canvas.id
+                    ? "bg-[var(--color-hover)]"
+                    : "hover:bg-[var(--color-hover)]"
+                  }`}
+              >
+                <button
+                  onClick={async () => { await loadCanvas(canvas.id); onViewChange("canvas"); }}
+                  className="flex-1 text-left px-3 py-2.5 min-w-0 cursor-pointer"
+                >
+                  <div className="truncate text-[13px] leading-snug">{canvas.title}</div>
+                  <div className="text-[11px] text-[var(--color-text-secondary)] mt-0.5">
+                    {formatDate(canvas.updatedAt)}
+                  </div>
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deleteCanvasItem(canvas.id);
+                  }}
+                  className="p-1.5 mr-2 rounded-md text-[var(--color-text-secondary)]
+                             opacity-0 group-hover:opacity-100
+                             hover:text-red-500 hover:bg-red-500/10
+                             transition-all cursor-pointer"
+                  title="Delete canvas"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            ))}
+
+            {canvases.length === 0 && (
+              <p className="px-3 py-6 text-[12px] text-[var(--color-text-secondary)] text-center">
+                No saved canvases yet. Create one and hit Save.
+              </p>
+            )}
+          </div>
         ) : (
           <div className="px-3 py-4 text-[13px] text-[var(--color-text-secondary)]">
-            Edit your memory and instructions in the main panel.
+            {activeView === "brain"
+              ? "Edit your memory and instructions in the main panel."
+              : "User guide and feature documentation."}
           </div>
         )}
       </div>

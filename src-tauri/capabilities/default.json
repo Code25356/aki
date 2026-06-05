@@ -6,6 +6,8 @@
   "permissions": [
     "core:default",
     "opener:default",
-    "process:default"
+    "process:default",
+    "global-shortcut:allow-register",
+    "global-shortcut:allow-unregister"
   ]
 }
