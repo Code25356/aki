@@ -1,0 +1,161 @@
+import type { CatalogEntry } from "./types";
+
+export const MCP_CATALOG: CatalogEntry[] = [
+  // --- Recommended (no API key, high impact) ---
+  {
+    id: "playwright",
+    name: "Playwright Browser",
+    description: "Browse websites, read full articles, interact with web apps — no screenshots needed",
+    category: "research",
+    package: "@playwright/mcp",
+    command: "npx",
+    args: ["-y", "@playwright/mcp@latest"],
+    icon: "Globe",
+  },
+  {
+    id: "memory",
+    name: "Knowledge Graph",
+    description: "Structured persistent memory with entities & relationships across sessions",
+    category: "productivity",
+    package: "@modelcontextprotocol/server-memory",
+    command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-memory"],
+    icon: "Database",
+  },
+  {
+    id: "fetch",
+    name: "Web Fetch",
+    description: "Fetch web content as HTML, Markdown, plain text, or YouTube transcripts",
+    category: "research",
+    package: "mcp-fetch-server",
+    command: "npx",
+    args: ["-y", "mcp-fetch-server"],
+    icon: "Globe",
+  },
+  {
+    id: "filesystem",
+    name: "Filesystem",
+    description: "Read, write, and manage local files and directories",
+    category: "productivity",
+    package: "@modelcontextprotocol/server-filesystem",
+    command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp/aki-workspace"],
+    icon: "FolderOpen",
+  },
+
+  // --- Documents ---
+  {
+    id: "pdf-reader",
+    name: "PDF Reader",
+    description: "Extract text from PDF files with chunked pagination",
+    category: "productivity",
+    package: "@modelcontextprotocol/server-pdf",
+    command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-pdf"],
+    icon: "FileText",
+  },
+  {
+    id: "reportflow",
+    name: "PDF Report Generator",
+    description: "Generate formatted PDF reports from structured data",
+    category: "productivity",
+    package: "reportflow-mcp",
+    command: "npx",
+    args: ["-y", "reportflow-mcp"],
+    icon: "FileOutput",
+  },
+
+  // --- Research ---
+  {
+    id: "brave-search",
+    name: "Brave Search",
+    description: "Web search via Brave Search API with rich snippets",
+    category: "research",
+    package: "@modelcontextprotocol/server-brave-search",
+    command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-brave-search"],
+    envRequired: ["BRAVE_API_KEY"],
+    icon: "Search",
+  },
+  {
+    id: "arxiv",
+    name: "ArXiv Papers",
+    description: "Search and read academic papers from ArXiv",
+    category: "research",
+    package: "mcp-server-arxiv",
+    command: "npx",
+    args: ["-y", "mcp-server-arxiv"],
+    icon: "BookOpen",
+  },
+
+  // --- Finance ---
+  {
+    id: "alphavantage",
+    name: "Alpha Vantage",
+    description: "Real-time & historical stock, forex, crypto data with technical indicators",
+    category: "finance",
+    package: "@modelcontextprotocol/server-alphavantage",
+    command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-alphavantage"],
+    envRequired: ["ALPHAVANTAGE_API_KEY"],
+    icon: "TrendingUp",
+  },
+  {
+    id: "financial-datasets",
+    name: "Financial Datasets",
+    description: "Company financials, earnings, SEC filings, and news",
+    category: "finance",
+    package: "financial-datasets-mcp",
+    command: "npx",
+    args: ["-y", "financial-datasets-mcp"],
+    envRequired: ["FINANCIAL_DATASETS_API_KEY"],
+    icon: "BarChart3",
+  },
+
+  // --- Writing & Creative ---
+  {
+    id: "sequential-thinking",
+    name: "Sequential Thinking",
+    description: "Step-by-step reasoning and analysis for complex problems",
+    category: "writing",
+    package: "@modelcontextprotocol/server-sequential-thinking",
+    command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+    icon: "Brain",
+  },
+
+  // --- Productivity ---
+  {
+    id: "sqlite",
+    name: "SQLite",
+    description: "Query and manage SQLite databases",
+    category: "productivity",
+    package: "@modelcontextprotocol/server-sqlite",
+    command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-sqlite"],
+    icon: "Database",
+  },
+
+  // --- Dev ---
+  {
+    id: "git",
+    name: "Git",
+    description: "Git operations: log, diff, blame, branches, commits",
+    category: "dev",
+    package: "@modelcontextprotocol/server-git",
+    command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-git"],
+    icon: "GitBranch",
+  },
+  {
+    id: "github",
+    name: "GitHub",
+    description: "GitHub API: issues, PRs, repos, code search",
+    category: "dev",
+    package: "@modelcontextprotocol/server-github",
+    command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-github"],
+    envRequired: ["GITHUB_PERSONAL_ACCESS_TOKEN"],
+    icon: "Github",
+  },
+];

@@ -425,6 +425,25 @@ export const macroContextTool: ToolDefinition = {
   },
 };
 
+export const readWebpageTool: ToolDefinition = {
+  type: "function",
+  function: {
+    name: "read_webpage",
+    description:
+      "Read a webpage and extract its main content cleanly (no ads, navigation, or boilerplate). Returns clean markdown of the article/page body. Use this for reading articles, documentation, blog posts, and any web page where you need the actual content. Preferred over raw fetch for reading purposes.",
+    parameters: {
+      type: "object",
+      properties: {
+        url: {
+          type: "string",
+          description: "The full URL to read (e.g. 'https://example.com/article')",
+        },
+      },
+      required: ["url"],
+    },
+  },
+};
+
 export const runCodeTool: ToolDefinition = {
   type: "function",
   function: {
@@ -444,9 +463,15 @@ export const runCodeTool: ToolDefinition = {
   },
 };
 
-export function getEnabledTools(webSearchEnabled: boolean, driveEnabled: boolean, gmailEnabled: boolean): ToolDefinition[] {
+export function getEnabledTools(
+  webSearchEnabled: boolean,
+  driveEnabled: boolean,
+  gmailEnabled: boolean,
+  mcpTools: ToolDefinition[] = [],
+): ToolDefinition[] {
   const tools: ToolDefinition[] = [
     saveMemoryTool,
+    readWebpageTool,
     runCodeTool,
     stockQuoteTool,
     technicalAnalysisTool,
@@ -462,5 +487,7 @@ export function getEnabledTools(webSearchEnabled: boolean, driveEnabled: boolean
   if (webSearchEnabled) tools.push(webSearchTool);
   if (driveEnabled) tools.push(listDriveFilesTool, readDriveFileTool, createDriveFileTool, updateDriveFileTool);
   if (gmailEnabled) tools.push(listEmailsTool, readEmailTool, sendEmailTool);
+  // Append MCP server tools
+  if (mcpTools.length > 0) tools.push(...mcpTools);
   return tools;
 }

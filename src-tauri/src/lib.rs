@@ -1,6 +1,8 @@
 use base64::Engine;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+mod mcp;
+
 #[tauri::command]
 fn extract_pdf_text(base64_data: String) -> Result<String, String> {
     let bytes = base64::engine::general_purpose::STANDARD
@@ -183,11 +185,17 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .manage(mcp::create_mcp_state())
         .invoke_handler(tauri::generate_handler![
             rebuild_app,
             extract_pdf_text,
             capture_oauth_callback,
-            fetch_url
+            fetch_url,
+            mcp::mcp_spawn,
+            mcp::mcp_send,
+            mcp::mcp_stop,
+            mcp::mcp_install,
+            mcp::mcp_list
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

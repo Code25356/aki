@@ -67,7 +67,7 @@ export default function BrainView() {
     setActiveVoiceId,
   } = useMemoryStore();
 
-  const { primaryModel, evalModel, setPrimaryModel, setEvalModel } =
+  const { primaryModel, panelModels, setPrimaryModel, togglePanelModel } =
     useModelStore();
 
   const [showKey, setShowKey] = useState(false);
@@ -474,30 +474,34 @@ export default function BrainView() {
             </div>
             <div>
               <label className="text-xs text-[var(--color-text-secondary)] mb-1 block">
-                Eval Model (optional)
+                Multi-Model Panel (compare responses)
               </label>
-              <select
-                value={evalModel?.id || ""}
-                onChange={(e) => {
-                  if (!e.target.value) {
-                    setEvalModel(null);
-                  } else {
-                    const m = MODELS.find((m) => m.id === e.target.value);
-                    if (m) setEvalModel(m);
-                  }
-                }}
-                className="w-full px-4 py-2.5 rounded-xl text-sm
-                           bg-[var(--color-hover)] border border-[var(--color-sidebar-border)]
-                           outline-none focus:border-[var(--color-accent)]
-                           transition-colors cursor-pointer"
-              >
-                <option value="">None</option>
-                {MODELS.filter((m) => m.id !== primaryModel.id).map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
+              <p className="text-[11px] text-[var(--color-text-secondary)] mb-2">
+                Select additional models to get parallel responses in tabs.
+              </p>
+              <div className="space-y-1.5">
+                {MODELS.filter((m) => m.id !== primaryModel.id).map((m) => {
+                  const active = panelModels.some((p) => p.id === m.id);
+                  return (
+                    <label
+                      key={m.id}
+                      className={`flex items-center gap-2.5 px-3 py-2 rounded-lg cursor-pointer transition-colors
+                        ${active
+                          ? "bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/30"
+                          : "hover:bg-[var(--color-hover)] border border-transparent"
+                        }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={active}
+                        onChange={() => togglePanelModel(m)}
+                        className="accent-[var(--color-accent)] w-3.5 h-3.5"
+                      />
+                      <span className="text-sm">{m.name}</span>
+                    </label>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>

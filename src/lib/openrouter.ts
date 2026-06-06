@@ -1,4 +1,4 @@
-import { useMemoryStore } from "../store/memoryStore";
+import { useMemoryStore, type MemoryCategory } from "../store/memoryStore";
 
 export interface UsageData {
   promptTokens: number;
@@ -22,12 +22,17 @@ export function generateTitle(userMessage: string): string {
   return (lastSpace > 20 ? truncated.slice(0, lastSpace) : truncated) + "…";
 }
 
+export interface ExtractedMemory {
+  fact: string;
+  category?: MemoryCategory;
+}
+
 export async function extractMemories(
   apiKey: string,
   model: string,
   conversation: string,
   existingMemories: string[],
-): Promise<string[]> {
+): Promise<ExtractedMemory[]> {
   try {
     const existing =
       existingMemories.length > 0
@@ -51,7 +56,18 @@ export async function extractMemories(
           messages: [
             {
               role: "system",
-              content: `You extract key facts about the user from conversations. Extract ONLY new, specific, useful facts about the user (their preferences, projects, expertise, goals, name, location, etc). Do NOT extract facts about the AI assistant. Return one fact per line, without bullet points or dashes. If there are no new facts worth remembering, return the single word NONE. Keep each fact concise (under 15 words).${existing}`,
+              content: `You extract key facts about the user from conversations. Extract ONLY new, specific, useful facts about the user (their preferences, projects, expertise, goals, name, location, etc). Do NOT extract facts about the AI assistant.
+
+Format each fact as: [category] fact text
+Categories: identity, expertise, interest, project, relationship, preference, pattern, workflow
+
+Examples:
+[identity] User's name is Alex
+[project] Building a Tauri desktop app called Aki
+[preference] Prefers structured tables over prose
+[expertise] Deep experience with TypeScript and React
+
+If no new facts, return NONE. Keep each fact under 15 words.${existing}`,
             },
             { role: "user", content: conversation },
           ],
@@ -82,23 +98,32 @@ export async function extractMemories(
 
     if (!text || text.toUpperCase() === "NONE") return [];
 
-    const facts = text
+    const VALID_CATEGORIES = new Set(["identity", "expertise", "interest", "project", "relationship", "preference", "pattern", "workflow"]);
+
+    const parsed: ExtractedMemory[] = text
       .split("\n")
-      .map((line: string) => line.replace(/^[-*•\d.)\s]+/, "").trim())
-      .filter((line: string) => {
-        if (line.length === 0 || line.toUpperCase() === "NONE") return false;
-        if (line.length < 5 || line.length > 200) return false;
+      .map((line: string): ExtractedMemory => {
+        const cleaned = line.replace(/^[-*•\d.)\s]+/, "").trim();
+        const catMatch = cleaned.match(/^\[(\w+)\]\s*(.+)/);
+        if (catMatch && VALID_CATEGORIES.has(catMatch[1])) {
+          return { fact: catMatch[2].trim(), category: catMatch[1] as MemoryCategory };
+        }
+        return { fact: cleaned, category: undefined };
+      })
+      .filter((entry: ExtractedMemory) => {
+        if (entry.fact.length === 0 || entry.fact.toUpperCase() === "NONE") return false;
+        if (entry.fact.length < 5 || entry.fact.length > 200) return false;
         return true;
       });
 
     const existingLower = new Set(
       existingMemories.map((m) => m.toLowerCase()),
     );
-    const unique = facts.filter(
-      (f: string) => !existingLower.has(f.toLowerCase()),
+    const unique = parsed.filter(
+      (entry: ExtractedMemory) => !existingLower.has(entry.fact.toLowerCase()),
     );
 
-    console.log("[Aki:memory] Extracted facts:", unique);
+    console.log("[Aki:memory] Extracted facts:", unique.map((e: ExtractedMemory) => e.fact));
     return unique;
   } catch (err) {
     console.error("[Aki:memory] Exception:", err);

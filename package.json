@@ -30,6 +30,7 @@
     "@tiptap/react": "^3.23.6",
     "@tiptap/starter-kit": "^3.23.6",
     "@types/turndown": "^5.0.6",
+    "edge-tts-universal": "^1.4.0",
     "katex": "^0.16.46",
     "lucide-react": "^1.8.0",
     "mammoth": "^1.12.0",
@@ -53,6 +54,7 @@
     "@types/react-dom": "^19.1.6",
     "@types/react-syntax-highlighter": "^15.5.13",
     "@vitejs/plugin-react": "^4.6.0",
+    "@vitest/coverage-v8": "^4.1.8",
     "typescript": "~5.8.3",
     "vite": "^7.0.4",
     "vitest": "^4.1.8"

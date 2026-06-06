@@ -22,6 +22,8 @@ import {
   Download,
   FileEdit,
   Microscope,
+  ThumbsUp,
+  ThumbsDown,
 } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { MarkdownRenderer } from "./MarkdownRenderer";
@@ -226,6 +228,107 @@ function SourcesSection({ sources }: { sources: SearchSource[] }) {
   );
 }
 
+function ResponseTabs({ msg }: { msg: Message }) {
+  const { setActiveResponse, setResponseFeedback } = useChatStore();
+  const responses = msg.responses;
+  if (!responses || responses.length <= 1) return null;
+
+  const activeIdx = msg.activeResponseIdx ?? 0;
+
+  return (
+    <div className="mt-3 border-t border-[var(--color-sidebar-border)] pt-2">
+      {/* Tab bar */}
+      <div className="flex items-center gap-1 mb-2 overflow-x-auto">
+        {responses.map((r, i) => (
+          <button
+            key={r.modelId}
+            onClick={() => setActiveResponse(msg.id, i)}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors cursor-pointer whitespace-nowrap
+              ${i === activeIdx
+                ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)] border border-[var(--color-accent)]/30"
+                : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)]"
+              }
+              ${r.isStreaming ? "animate-pulse" : ""}
+              ${r.error ? "text-red-400" : ""}`}
+          >
+            {r.modelName}
+            {r.isStreaming && " …"}
+          </button>
+        ))}
+      </div>
+      {/* Feedback buttons for active response */}
+      <div className="flex items-center gap-1.5 mb-2">
+        <button
+          onClick={() => {
+            const current = responses[activeIdx]?.feedback;
+            setResponseFeedback(msg.id, activeIdx, current === "up" ? undefined : "up");
+          }}
+          className={`p-1 rounded transition-colors cursor-pointer
+            ${responses[activeIdx]?.feedback === "up"
+              ? "text-green-500 bg-green-500/10"
+              : "text-[var(--color-text-secondary)] hover:text-green-500 hover:bg-green-500/5"
+            }`}
+          title="Good response"
+        >
+          <ThumbsUp size={13} />
+        </button>
+        <button
+          onClick={() => {
+            const current = responses[activeIdx]?.feedback;
+            setResponseFeedback(msg.id, activeIdx, current === "down" ? undefined : "down");
+          }}
+          className={`p-1 rounded transition-colors cursor-pointer
+            ${responses[activeIdx]?.feedback === "down"
+              ? "text-red-500 bg-red-500/10"
+              : "text-[var(--color-text-secondary)] hover:text-red-500 hover:bg-red-500/5"
+            }`}
+          title="Bad response"
+        >
+          <ThumbsDown size={13} />
+        </button>
+        {responses[activeIdx]?.feedback && (
+          <span className="text-[10px] text-[var(--color-text-secondary)] ml-1">
+            Feedback recorded
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SingleFeedback({ msg }: { msg: Message }) {
+  const { setResponseFeedback } = useChatStore();
+  // For single-model messages, use responses[0] if it exists, otherwise create virtual
+  const feedback = msg.responses?.[0]?.feedback;
+
+  return (
+    <div className="flex items-center gap-1.5 mt-2 opacity-0 group-hover/msg:opacity-100 transition-opacity">
+      <button
+        onClick={() => setResponseFeedback(msg.id, 0, feedback === "up" ? undefined : "up")}
+        className={`p-1 rounded transition-colors cursor-pointer
+          ${feedback === "up"
+            ? "text-green-500 bg-green-500/10"
+            : "text-[var(--color-text-secondary)] hover:text-green-500 hover:bg-green-500/5"
+          }`}
+        title="Good response"
+      >
+        <ThumbsUp size={12} />
+      </button>
+      <button
+        onClick={() => setResponseFeedback(msg.id, 0, feedback === "down" ? undefined : "down")}
+        className={`p-1 rounded transition-colors cursor-pointer
+          ${feedback === "down"
+            ? "text-red-500 bg-red-500/10"
+            : "text-[var(--color-text-secondary)] hover:text-red-500 hover:bg-red-500/5"
+          }`}
+        title="Bad response"
+      >
+        <ThumbsDown size={12} />
+      </button>
+    </div>
+  );
+}
+
 function AttachmentPreview({ attachments }: { attachments: Attachment[] }) {
   if (!attachments?.length) return null;
   return (
@@ -329,35 +432,53 @@ function MessageBubble({ msg }: { msg: Message }) {
         {/* Attachments */}
         {msg.attachments && <AttachmentPreview attachments={msg.attachments} />}
         <div className="text-[13px] leading-relaxed break-words">
-          {msg.error && (
-            <span className="text-red-500 flex items-center gap-1">
-              <AlertCircle size={12} />
-              {msg.error}
-            </span>
-          )}
-          {msg.role === "assistant" && msg.content ? (
-            <div className="prose-chat">
-              <MarkdownRenderer content={msg.content} />
-            </div>
-          ) : (
-            msg.content && <span className="whitespace-pre-wrap">{msg.content}</span>
-          )}
-          {msg.isStreaming && msg.content.length === 0 && !msg.error && (
-            <span className="inline-block w-2 h-4 bg-[var(--color-text-secondary)] animate-pulse rounded-sm" />
-          )}
-          {msg.isStreaming && msg.content.length > 0 && (
-            <span className="inline-block w-1.5 h-4 bg-[var(--color-accent)] ml-0.5 animate-pulse rounded-sm align-text-bottom" />
-          )}
+          {(() => {
+            const activeResp = msg.responses && msg.responses.length > 1
+              ? msg.responses[msg.activeResponseIdx ?? 0]
+              : null;
+            const displayContent = activeResp ? activeResp.content : msg.content;
+            const displayError = activeResp?.error || msg.error;
+            const isStreaming = activeResp ? activeResp.isStreaming : msg.isStreaming;
+
+            return (
+              <>
+                {displayError && (
+                  <span className="text-red-500 flex items-center gap-1">
+                    <AlertCircle size={12} />
+                    {displayError}
+                  </span>
+                )}
+                {msg.role === "assistant" && displayContent ? (
+                  <div className="prose-chat">
+                    <MarkdownRenderer content={displayContent} />
+                  </div>
+                ) : (
+                  displayContent && <span className="whitespace-pre-wrap">{displayContent}</span>
+                )}
+                {isStreaming && displayContent.length === 0 && !displayError && (
+                  <span className="inline-block w-2 h-4 bg-[var(--color-text-secondary)] animate-pulse rounded-sm" />
+                )}
+                {isStreaming && displayContent.length > 0 && (
+                  <span className="inline-block w-1.5 h-4 bg-[var(--color-accent)] ml-0.5 animate-pulse rounded-sm align-text-bottom" />
+                )}
+              </>
+            );
+          })()}
         </div>
         {/* Search phase indicator */}
         {msg.searchPhase === "searching" && <SearchBadge phase={msg.searchPhase} />}
         {/* Sources section */}
         {msg.sources && msg.sources.length > 0 && <SourcesSection sources={msg.sources} />}
-        {/* Eval phase indicator */}
+        {/* Multi-model response tabs */}
+        {msg.responses && msg.responses.length > 1 && <ResponseTabs msg={msg} />}
+        {/* Single-model feedback (when no panel) */}
+        {msg.role === "assistant" && !msg.isStreaming && msg.content && (!msg.responses || msg.responses.length <= 1) && (
+          <SingleFeedback msg={msg} />
+        )}
+        {/* Legacy eval UI for old threads */}
         {msg.evalPhase && msg.evalPhase !== "done" && msg.evalPhase !== "generating" && (
           <EvalBadge phase={msg.evalPhase} />
         )}
-        {/* Eval notes (expandable) */}
         {msg.evalPhase === "done" && msg.eval && <EvalNotes msg={msg} />}
       </div>
     </div>

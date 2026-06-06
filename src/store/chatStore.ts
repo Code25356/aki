@@ -4,12 +4,12 @@ import {
   type ContentPart,
   streamChat,
   streamChatWithTools,
-  chatCompletion,
   generateTitle,
   extractMemories,
 } from "../lib/openrouter";
 import { shouldUseRag, retrieveRelevantChunks } from "../lib/rag";
-import { useMemoryStore } from "./memoryStore";
+import { maybeSynthesizeProfile } from "../lib/profileSynthesis";
+import { useMemoryStore, selectRelevantMemories } from "./memoryStore";
 import { useModelStore } from "./modelStore";
 import {
   type ChatThread,
@@ -24,6 +24,10 @@ import { searchWeb, formatSearchResultsForLLM } from "../lib/webSearch";
 import { listFiles, readFile, createFile, updateFile, formatFileListForLLM, type DriveFile } from "../lib/googleDrive";
 import { listEmails, readEmail, sendEmail, formatEmailListForLLM } from "../lib/gmail";
 import { compactIfNeeded } from "../lib/contextCompaction";
+import { distillPreferences } from "../lib/feedbackDistill";
+import { useMcpStore } from "./mcpStore";
+import { cleanWebContent, isWebContentTool } from "../lib/mcp/contentCleaner";
+import { classifyIntent, selectTools } from "../lib/mcp/router";
 import {
   handleGetQuote,
   handleTechnicalAnalysis,
@@ -43,6 +47,15 @@ export interface EvalMetadata {
   critique: string;
   originalContent: string;
   evalModel: string;
+}
+
+export interface ModelResponse {
+  modelId: string;
+  modelName: string;
+  content: string;
+  isStreaming: boolean;
+  error?: string;
+  feedback?: "up" | "down";
 }
 
 export interface Attachment {
@@ -75,6 +88,9 @@ export interface Message {
   searchPhase?: "searching" | "done";
   sources?: SearchSource[];
   pinned?: boolean;
+  /** Multi-model parallel responses (when panel models are active) */
+  responses?: ModelResponse[];
+  activeResponseIdx?: number;
 }
 
 interface ChatState {
@@ -99,6 +115,8 @@ interface ChatState {
   forkThread: (afterMessageId: string) => Promise<void>;
   pinDoc: (doc: PinnedDoc) => Promise<void>;
   unpinDoc: (docId: string) => Promise<void>;
+  setActiveResponse: (messageId: string, idx: number) => void;
+  setResponseFeedback: (messageId: string, idx: number, feedback: "up" | "down" | undefined) => void;
 }
 
 let idCounter = 0;
@@ -108,25 +126,65 @@ function genId() {
 
 let pipelineCounter = 0;
 
-function buildSystemMessages(pinnedDocs: PinnedDoc[], enabledToolNames?: string[]): ChatMessage[] {
-  const { systemInstructions, manualMemory, autoMemories, styleExamples } =
+function buildSystemMessages(pinnedDocs: PinnedDoc[], enabledToolNames?: string[], routerGuidance?: string, userMessage?: string): ChatMessage[] {
+  const { systemInstructions, manualMemory, autoMemories, userProfile, styleExamples, preferenceRules, formatStats } =
     useMemoryStore.getState();
   const parts: string[] = [];
   if (systemInstructions.trim()) parts.push(systemInstructions.trim());
 
   // Explicitly tell the model what tools it has — models forget/deny without this
   if (enabledToolNames && enabledToolNames.length > 0) {
-    parts.push(
-      `YOUR AVAILABLE TOOLS: You have the following tools available and MUST use them when relevant. Do NOT say you lack a capability if it's listed here. If the user asks you to do something a tool can handle, USE the tool.\n\nTools: ${enabledToolNames.join(", ")}`,
-    );
+    let toolSection = `YOUR AVAILABLE TOOLS: You have the following tools available and MUST use them when relevant. Do NOT say you lack a capability if it's listed here. If the user asks you to do something a tool can handle, USE the tool.\n\nTools: ${enabledToolNames.join(", ")}`;
+    if (routerGuidance) {
+      toolSection += `\n\n${routerGuidance}`;
+    }
+    parts.push(toolSection);
   }
 
   if (manualMemory.trim())
     parts.push(`User context:\n${manualMemory.trim()}`);
   if (autoMemories.length > 0) {
+    // For 30+ memories with a profile: inject profile + relevant subset
+    // For <30 memories: inject all facts (no information loss)
+    const relevantMemories = userMessage
+      ? selectRelevantMemories(autoMemories, userMessage)
+      : autoMemories;
+    const memoryHeader = userProfile && autoMemories.length >= 30
+      ? `User profile:\n${userProfile}\n\nRelevant details:\n${relevantMemories.map((m) => `- ${m.fact}`).join("\n")}`
+      : `Remembered facts about the user:\n${relevantMemories.map((m) => `- ${m.fact}`).join("\n")}`;
+    parts.push(memoryHeader);
+  }
+  // Inject learned preferences from distilled feedback
+  if (preferenceRules.length > 0) {
+    const sorted = [...preferenceRules].sort((a, b) => b.weight - a.weight).slice(0, 15);
     parts.push(
-      `Remembered facts about the user:\n${autoMemories.map((m) => `- ${m.fact}`).join("\n")}`,
+      `USER PREFERENCES (learned from feedback — follow these strictly):\n${sorted.map((p) => `- ${p.rule}`).join("\n")}`,
     );
+  }
+  // Inject format preferences when 5+ feedback signals exist
+  const totalFormatSignals = formatStats.tablesLiked + formatStats.tablesDisliked +
+    formatStats.briefLiked + formatStats.briefDisliked +
+    formatStats.detailLiked + formatStats.detailDisliked;
+  if (totalFormatSignals >= 5) {
+    const prefs: string[] = [];
+    const tableTotal = formatStats.tablesLiked + formatStats.tablesDisliked;
+    if (tableTotal >= 3) {
+      if (formatStats.tablesLiked > formatStats.tablesDisliked * 2) {
+        prefs.push(`User prefers tables for comparisons (liked ${formatStats.tablesLiked}/${tableTotal} times)`);
+      } else if (formatStats.tablesDisliked > formatStats.tablesLiked * 2) {
+        prefs.push(`User dislikes tables — prefer prose or bullets`);
+      }
+    }
+    const briefTotal = formatStats.briefLiked + formatStats.briefDisliked;
+    const detailTotal = formatStats.detailLiked + formatStats.detailDisliked;
+    if (briefTotal >= 3 && formatStats.briefLiked > formatStats.briefDisliked * 2) {
+      prefs.push(`User prefers concise responses (<200 words)`);
+    } else if (detailTotal >= 3 && formatStats.detailLiked > formatStats.detailDisliked * 2) {
+      prefs.push(`User prefers detailed responses (>500 words)`);
+    }
+    if (prefs.length > 0) {
+      parts.push(`FORMAT PREFERENCES (from feedback):\n${prefs.map((p) => `- ${p}`).join("\n")}`);
+    }
   }
   if (styleExamples.length > 0) {
     parts.push(
@@ -162,6 +220,9 @@ Available types:
 - kv-list: {type, title?, items: [{key, value, color?}]} — key-value pairs
 - scorecard: {type, title, score, max?, rating?, breakdown?: [{label, score, max}]} — rated assessment
 Colors: green, red, orange, yellow, blue, purple, gray.`);
+
+  // Universal output quality rule (always injected, very brief)
+  parts.push(`QUALITY: Be direct, quantify claims, cite sources. For 3+ items use a table. If data is missing, say so and try another tool once. Never say "significant" without a number.`);
 
   if (parts.length === 0) return [];
   return [{ role: "system", content: parts.join("\n\n") }];
@@ -249,8 +310,9 @@ function buildContent(msg: Message, ragResults?: Map<string, string>, vision?: b
     for (const img of images) {
       if (img.extractedText) {
         text += `\n\n--- ${img.name} ---\n${img.extractedText}`;
+      } else {
+        text += `\n\n[Image attached: ${img.name} — this model does not support image input]`;
       }
-      // Skip images without extractedText for non-vision models
     }
     return text;
   }
@@ -382,9 +444,80 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     }
   },
 
+  setActiveResponse: (messageId: string, idx: number) => {
+    set((state) => ({
+      messages: state.messages.map((m) =>
+        m.id === messageId ? { ...m, activeResponseIdx: idx, content: m.responses?.[idx]?.content || m.content } : m,
+      ),
+    }));
+  },
+
+  setResponseFeedback: (messageId: string, idx: number, feedback: "up" | "down" | undefined) => {
+    const msg = get().messages.find((m) => m.id === messageId);
+    if (!msg) return;
+
+    // Update state
+    if (msg.responses) {
+      set((state) => ({
+        messages: state.messages.map((m) => {
+          if (m.id !== messageId || !m.responses) return m;
+          const responses = m.responses.map((r, i) =>
+            i === idx ? { ...r, feedback } : r,
+          );
+          return { ...m, responses };
+        }),
+      }));
+    }
+
+    // Persist feedback to memory store
+    if (feedback) {
+      const userMsg = get().messages
+        .slice(0, get().messages.indexOf(msg))
+        .reverse()
+        .find((m) => m.role === "user");
+
+      if (msg.responses?.[idx]) {
+        // Multi-model: use the specific response
+        const resp = msg.responses[idx];
+        useMemoryStore.getState().addFeedback({
+          modelId: resp.modelId,
+          rating: feedback,
+          query: (userMsg?.content || "").slice(0, 200),
+          response: resp.content.slice(0, 500),
+        });
+        useMemoryStore.getState().trackFormat(resp.content, feedback);
+      } else {
+        // Single-model: use message content directly
+        useMemoryStore.getState().addFeedback({
+          modelId: msg.modelId || "unknown",
+          rating: feedback,
+          query: (userMsg?.content || "").slice(0, 200),
+          response: msg.content.slice(0, 500),
+        });
+        useMemoryStore.getState().trackFormat(msg.content, feedback);
+      }
+
+      // Auto-distill preferences every 5 feedback entries
+      const memState = useMemoryStore.getState();
+      if (memState.feedbackEntries.length >= 5 && memState.feedbackEntries.length % 5 === 0) {
+        const { primaryModel } = useModelStore.getState();
+        distillPreferences(memState.feedbackEntries, memState.apiKey, primaryModel.id)
+          .then((rules) => {
+            if (rules.length > 0) {
+              useMemoryStore.getState().replacePreferenceRules(rules);
+              console.log("[Aki:feedback] Distilled", rules.length, "preference rules");
+            }
+          })
+          .catch(() => {}); // Fire-and-forget
+      }
+    }
+    // Persist to IndexedDB
+    persistThread(get());
+  },
+
   sendMessage: async (content: string, attachments?: Attachment[]) => {
     const { apiKey } = useMemoryStore.getState();
-    const { primaryModel, evalModel } = useModelStore.getState();
+    const { primaryModel, panelModels } = useModelStore.getState();
 
     if (!apiKey) {
       set({ error: "Please add your OpenRouter API key in the Brain tab." });
@@ -406,6 +539,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     };
     const assistantId = genId();
 
+    const hasPanel = panelModels.length > 0;
     const assistantMessage: Message = {
       id: assistantId,
       role: "assistant",
@@ -413,7 +547,15 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       model: primaryModel.name,
       modelId: primaryModel.id,
       isStreaming: true,
-      evalPhase: evalModel ? "generating" : undefined,
+      responses: hasPanel
+        ? [primaryModel, ...panelModels.filter((m) => m.id !== primaryModel.id)].map((m) => ({
+            modelId: m.id,
+            modelName: m.name,
+            content: "",
+            isStreaming: true,
+          }))
+        : undefined,
+      activeResponseIdx: 0,
     };
 
     const excludeIds = new Set([assistantId]);
@@ -436,10 +578,13 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     const activeDriveFolderId = get().threadDriveFolderId;
     const driveReady = driveEnabled && !!driveTokens && !!activeDriveFolderId;
     const gmailReady = gmailEnabled && !!driveTokens;
-    const tools = getEnabledTools(!!tavilyApiKey, driveReady, gmailReady);
+    const { mcpTools } = useMcpStore.getState();
+    const allTools = getEnabledTools(!!tavilyApiKey, driveReady, gmailReady, mcpTools);
+    const intents = classifyIntent(content);
+    const { tools, guidance: routerGuidance } = selectTools(allTools, intents);
     const toolNames = tools.map((t) => t.function.name);
 
-    const systemMessages = buildSystemMessages(get().pinnedDocs, toolNames);
+    const systemMessages = buildSystemMessages(get().pinnedDocs, toolNames, routerGuidance, content);
     const history = buildHistoryMessages(get().messages, excludeIds, ragResults, primaryModel.vision);
     const compactedHistory = await compactIfNeeded(systemMessages, history, primaryModel.id, apiKey);
     const apiMessages: ChatMessage[] = [...systemMessages, ...compactedHistory];
@@ -500,11 +645,15 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         primaryModel.id,
         latestText,
         memState.autoMemories.map((m) => m.fact),
-      ).then((newFacts) => {
-        if (newFacts.length > 0) {
-          console.log("[Aki:memory] Adding new memories:", newFacts);
-          useMemoryStore.getState().addAutoMemories(newFacts);
+      ).then((results) => {
+        if (results.length > 0) {
+          const facts = results.map((r) => r.fact);
+          const categories = results.map((r) => r.category);
+          console.log("[Aki:memory] Adding new memories:", facts);
+          useMemoryStore.getState().addAutoMemories(facts, categories);
         }
+        // Trigger profile synthesis in background (non-blocking)
+        maybeSynthesizeProfile(apiKey, primaryModel.id);
       });
 
       updateThread(set, thread);
@@ -795,8 +944,55 @@ export const useChatStore = create<ChatState>()((set, get) => ({
               const msg = err instanceof Error ? err.message : "Gmail send failed";
               results.push({ tool_call_id: tc.id, role: "tool", content: `Error: ${msg}` });
             }
+          } else if (tc.function.name === "read_webpage") {
+            try {
+              const args = JSON.parse(tc.function.arguments);
+              const url = args.url;
+              // Use Jina Reader for clean content extraction
+              const resp = await fetch(`https://r.jina.ai/${url}`, {
+                headers: { Accept: "text/markdown" },
+              });
+              if (!resp.ok) {
+                results.push({ tool_call_id: tc.id, role: "tool", content: `Error: Failed to read page (HTTP ${resp.status})` });
+              } else {
+                const raw = await resp.text();
+                const cleaned = cleanWebContent(raw);
+                results.push({ tool_call_id: tc.id, role: "tool", content: cleaned });
+              }
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : "Webpage read failed";
+              results.push({ tool_call_id: tc.id, role: "tool", content: `Error: ${msg}` });
+            }
+          } else if (tc.function.name.startsWith("mcp_")) {
+            // Route to MCP server
+            try {
+              const args = JSON.parse(tc.function.arguments);
+              let result = await useMcpStore.getState().callTool(tc.function.name, args);
+              // Clean web content from fetch/browse MCP tools
+              if (isWebContentTool(tc.function.name)) {
+                result = cleanWebContent(result);
+              }
+              results.push({ tool_call_id: tc.id, role: "tool", content: result });
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : "MCP tool call failed";
+              results.push({ tool_call_id: tc.id, role: "tool", content: `Error: ${msg}` });
+            }
           }
         }
+        // Post-process: detect tool failures and append fallback instructions
+        for (const r of results) {
+          if (r.content && r.content.startsWith("Error:")) {
+            // Tool errored — instruct model to use web_search as fallback
+            r.content += "\n\n[TOOL FAILED — use web_search to find this information instead. Do not retry this tool.]";
+          } else if (r.content) {
+            // Check for obviously invalid data (zeros, N/A)
+            const emptyMatches = r.content.match(/:\s*(0|N\/A|null|""|undefined)[\s,}]/g);
+            if (emptyMatches && emptyMatches.length >= 3) {
+              r.content += "\n\n[DATA INCOMPLETE — some fields returned 0 or N/A. Use web_search once to find the missing data. Do not retry this tool.]";
+            }
+          }
+        }
+
         // Reset accumulated content — model will re-generate with tool context
         accumulated = "";
         rafPending = false;
@@ -804,152 +1000,132 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         return results;
       },
       async () => {
-        // Generation done
+        // Primary model generation done
         flushToState();
-        updateMsg({ isStreaming: false });
 
-        if (!evalModel || !isPipelineValid()) {
-          updateMsg({ evalPhase: undefined });
+        // Update responses[0] with primary model content
+        if (hasPanel) {
+          set((state) => ({
+            messages: state.messages.map((m) => {
+              if (m.id !== assistantId) return m;
+              const responses = [...(m.responses || [])];
+              if (responses[0]) {
+                responses[0] = { ...responses[0], content: accumulated, isStreaming: false };
+              }
+              return { ...m, responses, isStreaming: false };
+            }),
+          }));
+        } else {
+          updateMsg({ isStreaming: false });
+        }
+
+        if (!isPipelineValid()) {
           await finishPipeline();
           return;
         }
 
-        // --- Phase 2: Evaluate ---
-        updateMsg({ evalPhase: "evaluating" });
-        const evalController = new AbortController();
-        set({ abortControllers: [evalController] });
+        // --- Parallel panel model streaming ---
+        if (!hasPanel) {
+          await finishPipeline();
+          return;
+        }
 
-        try {
-          const generatedAnswer = accumulated;
+        const otherModels = panelModels.filter((m) => m.id !== primaryModel.id);
+        if (otherModels.length === 0) {
+          await finishPipeline();
+          return;
+        }
 
-          // Build eval user content — include attachments if eval model has vision
-          let evalUserContent: ChatMessage["content"] = `User question: ${content}\n\nAI answer:\n${generatedAnswer}`;
-          const userImages = userMessage.attachments?.filter((a) => a.type === "image") || [];
-          if (userImages.length > 0) {
-            if (evalModel.vision) {
-              // Vision eval: include images
-              const parts: ContentPart[] = [
-                { type: "text", text: evalUserContent as string },
-              ];
-              for (const img of userImages) {
-                parts.push({ type: "image_url", image_url: { url: img.dataUrl } });
-              }
-              evalUserContent = parts;
-            } else {
-              // Non-vision eval: include extractedText
-              for (const img of userImages) {
-                if (img.extractedText) {
-                  evalUserContent += `\n\n--- ${img.name} ---\n${img.extractedText}`;
-                }
-              }
-            }
-          }
+        // Build system prompt WITHOUT tool definitions for panel models
+        const panelSystemMessages = buildSystemMessages(get().pinnedDocs);
+        const panelApiMessages: ChatMessage[] = [...panelSystemMessages, ...compactedHistory];
 
-          const critique = await chatCompletion(
-            apiKey,
-            evalModel.id,
-            [
-              {
-                role: "system",
-                content:
-                  "You are a critical reviewer. Review the following AI-generated answer for factual errors, hallucinations, logical issues, or missing important information. Be specific about any problems. If the answer is correct and complete, respond with exactly: NO ISSUES FOUND",
-              },
-              {
-                role: "user",
-                content: evalUserContent,
-              },
-            ],
-            evalController.signal,
-          );
-
-          if (!isPipelineValid()) return;
-
-          const noIssues =
-            critique.toUpperCase().includes("NO ISSUES FOUND") ||
-            critique.toUpperCase().includes("NO ISSUES") ||
-            critique.trim().length === 0;
-
-          if (noIssues) {
-            updateMsg({
-              evalPhase: "done",
-              eval: {
-                critique: "No issues found.",
-                originalContent: generatedAnswer,
-                evalModel: evalModel.name,
-              },
-            });
-            await finishPipeline();
-            return;
-          }
-
-          // --- Phase 3: Revise ---
-          updateMsg({
-            evalPhase: "revising",
-            eval: {
-              critique,
-              originalContent: generatedAnswer,
-              evalModel: evalModel.name,
-            },
+        // Strip image_url parts for non-vision models
+        function stripImages(messages: ChatMessage[]): ChatMessage[] {
+          return messages.map((msg) => {
+            if (!Array.isArray(msg.content)) return msg;
+            const filtered = (msg.content as any[]).filter((p: any) => p.type !== "image_url");
+            const imageCount = (msg.content as any[]).length - filtered.length;
+            if (filtered.length === msg.content.length) return msg;
+            const textContent = filtered.length === 1 && filtered[0].type === "text"
+              ? filtered[0].text
+              : filtered.map((p: any) => p.text || "").join("\n");
+            const suffix = imageCount > 0 ? `\n[${imageCount} image(s) attached — this model does not support image input]` : "";
+            return { ...msg, content: (textContent + suffix).trim() || "[Image attached — this model does not support image input]" };
           });
+        }
 
-          const reviseController = new AbortController();
-          set({ abortControllers: [reviseController] });
+        let completedCount = 0;
+        const totalPanel = otherModels.length;
+        const panelControllers: AbortController[] = [];
 
-          accumulated = "";
-          rafPending = false;
-          updateMsg({ content: "", isStreaming: true });
+        for (let i = 0; i < otherModels.length; i++) {
+          const panelModel = otherModels[i];
+          const responseIdx = i + 1; // index in responses array (0 is primary)
+          const panelController = new AbortController();
+          panelControllers.push(panelController);
+
+          // Use image-stripped messages for non-vision models
+          const modelMessages = panelModel.vision ? panelApiMessages : stripImages(panelApiMessages);
+
+          let panelAccum = "";
 
           streamChat(
             apiKey,
-            primaryModel.id,
-            [
-              ...apiMessages,
-              { role: "assistant", content: generatedAnswer },
-              {
-                role: "user",
-                content: `A reviewer found these issues with your answer:\n\n${critique}\n\nPlease provide a corrected and improved answer to the original question. Address all the issues raised. Do not mention the review process — just give the best answer.`,
-              },
-            ],
+            panelModel.id,
+            modelMessages,
             (chunk) => {
-              accumulated += chunk;
-              if (!rafPending) {
-                rafPending = true;
-                requestAnimationFrame(flushToState);
-              }
+              panelAccum += chunk;
+              // Throttled UI update
+              set((state) => ({
+                messages: state.messages.map((m) => {
+                  if (m.id !== assistantId) return m;
+                  const responses = [...(m.responses || [])];
+                  if (responses[responseIdx]) {
+                    responses[responseIdx] = { ...responses[responseIdx], content: panelAccum, isStreaming: true };
+                  }
+                  return { ...m, responses };
+                }),
+              }));
             },
-            async () => {
-              flushToState();
-              updateMsg({ isStreaming: false, evalPhase: "done" });
-              await finishPipeline();
+            () => {
+              // Panel stream done
+              set((state) => ({
+                messages: state.messages.map((m) => {
+                  if (m.id !== assistantId) return m;
+                  const responses = [...(m.responses || [])];
+                  if (responses[responseIdx]) {
+                    responses[responseIdx] = { ...responses[responseIdx], content: panelAccum, isStreaming: false };
+                  }
+                  return { ...m, responses };
+                }),
+              }));
+              completedCount++;
+              if (completedCount >= totalPanel) finishPipeline();
             },
             (error) => {
-              updateMsg({
-                isStreaming: false,
-                evalPhase: "done",
-                error: `Revision failed: ${error}`,
-              });
-              finishPipeline();
+              set((state) => ({
+                messages: state.messages.map((m) => {
+                  if (m.id !== assistantId) return m;
+                  const responses = [...(m.responses || [])];
+                  if (responses[responseIdx]) {
+                    responses[responseIdx] = { ...responses[responseIdx], isStreaming: false, error };
+                  }
+                  return { ...m, responses };
+                }),
+              }));
+              completedCount++;
+              if (completedCount >= totalPanel) finishPipeline();
             },
-            reviseController.signal,
+            panelController.signal,
           );
-        } catch (err: unknown) {
-          if (
-            err instanceof DOMException &&
-            err.name === "AbortError"
-          )
-            return;
-          // Eval failed — keep original answer
-          updateMsg({
-            evalPhase: "done",
-            error: `Eval failed: ${err instanceof Error ? err.message : "Unknown error"}`,
-          });
-          finishPipeline();
         }
+
+        set((state) => ({ abortControllers: [...state.abortControllers, ...panelControllers] }));
       },
       (error) => {
         updateMsg({
           isStreaming: false,
-          evalPhase: undefined,
           error,
           content: accumulated || "",
         });
@@ -967,11 +1143,11 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       activeStreams: 0,
       abortControllers: [],
       messages: state.messages.map((m) =>
-        m.isStreaming
+        m.isStreaming || m.responses?.some((r) => r.isStreaming)
           ? {
               ...m,
               isStreaming: false,
-              evalPhase: m.evalPhase ? "done" : undefined,
+              responses: m.responses?.map((r) => ({ ...r, isStreaming: false })),
             }
           : m,
       ),

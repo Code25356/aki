@@ -19,13 +19,13 @@ function estimateMessagesTokens(messages: ChatMessage[]): number {
 
 function getContextLimit(model: string): number {
   if (model.includes("gemini")) return 1000000;
-  if (model.includes("claude")) return 200000;
-  if (model.includes("gpt-5.4")) return 128000;
-  if (model.includes("gpt-4o")) return 128000;
-  if (model.includes("gpt-4.1")) return 1000000;
-  if (model.includes("grok")) return 131072;
-  if (model.includes("deepseek")) return 128000;
-  if (model.includes("o3") || model.includes("o4")) return 200000;
+  if (model.includes("claude")) return 1000000;
+  if (model.includes("qwen")) return 1000000;
+  if (model.includes("mimo")) return 1000000;
+  if (model.includes("minimax")) return 1000000;
+  if (model.includes("deepseek")) return 1000000;
+  if (model.includes("step")) return 256000;
+  if (model.includes("mercury")) return 128000;
   return 128000;
 }
 

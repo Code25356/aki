@@ -110,6 +110,28 @@ function isEmptyHtml(html: string): boolean {
   return false;
 }
 
+/** Extract plain text from HTML and generate a short title */
+function autoTitleFromHtml(html: string): string | null {
+  if (isEmptyHtml(html)) return null;
+  // Strip HTML tags, decode common entities, normalize whitespace
+  const text = html
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (text.length < 2) return null;
+  // Take first ~50 chars at word boundary
+  if (text.length <= 50) return text;
+  const truncated = text.slice(0, 50);
+  const lastSpace = truncated.lastIndexOf(" ");
+  return (lastSpace > 20 ? truncated.slice(0, lastSpace) : truncated) + "…";
+}
+
 // ─── Store ──────────────────────────────────────────────────────────────────
 
 // Read persisted data SYNCHRONOUSLY before store creation
@@ -174,9 +196,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const id = currentCanvasId || `canvas-${now}`;
     const existing = canvases.find((c) => c.id === id);
 
+    // Auto-generate title from content if still "Untitled" or empty
+    const title = (currentCanvasTitle && currentCanvasTitle !== "Untitled")
+      ? currentCanvasTitle
+      : autoTitleFromHtml(content) || "Untitled";
+
     const canvas: SavedCanvas = {
       id,
-      title: currentCanvasTitle || "Untitled",
+      title,
       content,
       createdAt: existing?.createdAt || now,
       updatedAt: now,
@@ -188,6 +215,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
     set({
       currentCanvasId: id,
+      currentCanvasTitle: title,
       hasUnsavedChanges: false,
       canvases: updatedCanvases,
     });

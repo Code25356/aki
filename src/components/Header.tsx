@@ -4,9 +4,10 @@ export default function Header() {
   return (
     <header
       data-tauri-drag-region
-      className="h-[var(--titlebar-height)] flex items-center justify-center
+      className="h-[var(--titlebar-height)] shrink-0 flex items-center justify-center
                  bg-[var(--color-header-bg)] backdrop-blur-xl
-                 border-b border-[var(--color-sidebar-border)]"
+                 border-b border-[var(--color-sidebar-border)]
+                 relative z-50 overflow-visible"
     >
       {/* Left: model selector — offset by traffic light width */}
       <div className="absolute left-0 top-0 h-full flex items-center"

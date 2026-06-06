@@ -11,11 +11,13 @@ import {
   Search,
   X,
   Mic,
+  Plug,
+  Headphones,
 } from "lucide-react";
 import { useChatStore } from "../store/chatStore";
 import { useCanvasStore } from "../store/canvasStore";
 
-export type AppView = "chats" | "brain" | "docs" | "canvas" | "meeting";
+export type AppView = "chats" | "brain" | "docs" | "canvas" | "meeting" | "tools" | "talk";
 
 interface SidebarProps {
   collapsed: boolean;
@@ -80,7 +82,7 @@ export default function Sidebar({ collapsed, onToggle, activeView, onViewChange 
       <div className="shrink-0" style={{ height: "calc(var(--titlebar-height) + 4px)" }} />
 
       {/* Nav tabs */}
-      <div className="flex items-center gap-1 px-3 pb-3 overflow-hidden">
+      <div className="flex items-center gap-1 px-3 pb-3 overflow-x-auto scrollbar-none flex-wrap">
         <button
           onClick={() => onViewChange("chats")}
           className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-[12px] font-medium
@@ -140,6 +142,30 @@ export default function Sidebar({ collapsed, onToggle, activeView, onViewChange 
         >
           <Mic size={13} />
           Meet
+        </button>
+        <button
+          onClick={() => onViewChange("tools")}
+          className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-[12px] font-medium
+                     transition-colors cursor-pointer shrink-0
+                     ${activeView === "tools"
+                       ? "bg-[var(--color-hover)] text-[var(--color-text-primary)]"
+                       : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+                     }`}
+        >
+          <Plug size={13} />
+          Tools
+        </button>
+        <button
+          onClick={() => onViewChange("talk")}
+          className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-[12px] font-medium
+                     transition-colors cursor-pointer shrink-0
+                     ${activeView === "talk"
+                       ? "bg-[var(--color-hover)] text-[var(--color-text-primary)]"
+                       : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+                     }`}
+        >
+          <Headphones size={13} />
+          Talk
         </button>
         <div className="flex-1" />
         <button
@@ -314,6 +340,12 @@ export default function Sidebar({ collapsed, onToggle, activeView, onViewChange 
           <div className="px-3 py-4 text-[13px] text-[var(--color-text-secondary)]">
             {activeView === "brain"
               ? "Edit your memory and instructions in the main panel."
+              : activeView === "talk"
+              ? "Hands-free voice conversation with your AI."
+              : activeView === "tools"
+              ? "Manage MCP server connections."
+              : activeView === "meeting"
+              ? "Record meetings and generate AI notes."
               : "User guide and feature documentation."}
           </div>
         )}

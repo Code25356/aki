@@ -5,6 +5,9 @@ import Header from "./components/Header";
 import ChatArea from "./components/ChatArea";
 import BrainView from "./components/BrainView";
 import DocsView from "./components/DocsView";
+import McpMarketplace from "./components/McpMarketplace";
+import TalkMode from "./components/TalkMode";
+import { useMcpStore } from "./store/mcpStore";
 import { CanvasEditor } from "./components/canvas";
 import { useCanvasStore } from "./store/canvasStore";
 import { useChatStore } from "./store/chatStore";
@@ -54,6 +57,11 @@ function App() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [searchOpen]);
+
+  // Auto-connect MCP servers on startup
+  useEffect(() => {
+    useMcpStore.getState().connectAutoServers();
+  }, []);
 
   // Global shortcut to show/hide app window
   useEffect(() => {
@@ -107,7 +115,10 @@ function App() {
             {activeView === "chats" ? <ChatArea />
               : activeView === "canvas" ? <CanvasView />
               : activeView === "meeting" ? <MeetingMode onDone={() => setActiveView("canvas")} />
-              : activeView === "brain" ? <BrainView /> : <DocsView />}
+              : activeView === "brain" ? <BrainView />
+              : activeView === "tools" ? <McpMarketplace />
+              : activeView === "talk" ? <TalkMode onExit={() => setActiveView("chats")} />
+              : <DocsView />}
           </div>
           {splitCanvas && activeView === "chats" && (
             <div className="w-1/2 flex flex-col min-w-0">
