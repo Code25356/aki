@@ -110,9 +110,19 @@ function TableWrapper({ children, ...props }: React.ComponentProps<"table">) {
 }
 
 function CitationLink({ href, children, sources }: { href?: string; children?: React.ReactNode; sources?: Source[] }) {
-  const handleClick = (e: React.MouseEvent, url: string) => {
+  const handleOpen = (e: React.MouseEvent, url: string) => {
     e.preventDefault();
-    openUrl(url).catch(() => window.open(url, "_blank"));
+    e.stopPropagation();
+    openUrl(url).catch(() => {
+      // Fallback: create a temporary link and click it
+      const a = document.createElement("a");
+      a.href = url;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    });
   };
 
   // Detect our cite:N links
@@ -122,37 +132,49 @@ function CitationLink({ href, children, sources }: { href?: string; children?: R
     const url = source?.url;
     const title = source?.title || `Source ${idx + 1}`;
 
+    const superStyle: React.CSSProperties = {
+      fontSize: "0.7em",
+      verticalAlign: "super",
+      lineHeight: 0,
+      position: "relative",
+      top: "-0.1em",
+      marginLeft: "1px",
+      textDecoration: "none",
+    };
+
     if (!url) {
-      // No source URL available — render as inert superscript number
       return (
-        <sup className="text-[10px] font-semibold text-[var(--color-text-secondary)] ml-[1px]">
+        <span style={superStyle} className="font-semibold text-[var(--color-text-secondary)]">
           {children}
-        </sup>
+        </span>
       );
     }
 
     return (
-      <sup
-        onClick={(e) => handleClick(e, url)}
+      <a
+        href={url}
+        onClick={(e) => handleOpen(e, url)}
         title={title}
-        className="cursor-pointer text-[10px] font-semibold text-[var(--color-accent)]
-                   hover:underline ml-[1px]"
+        style={superStyle}
+        className="font-semibold text-[var(--color-accent)] cursor-pointer hover:underline"
       >
         {children}
-      </sup>
+      </a>
     );
   }
 
   // Regular links — also use openUrl for Tauri
-  const handleRegularClick = (e: React.MouseEvent) => {
-    if (href && (href.startsWith("http://") || href.startsWith("https://"))) {
-      e.preventDefault();
-      openUrl(href).catch(() => window.open(href, "_blank"));
-    }
-  };
-
   return (
-    <a href={href} onClick={handleRegularClick} target="_blank" rel="noopener noreferrer">
+    <a
+      href={href}
+      onClick={(e) => {
+        if (href && (href.startsWith("http://") || href.startsWith("https://"))) {
+          handleOpen(e, href);
+        }
+      }}
+      target="_blank"
+      rel="noopener noreferrer"
+    >
       {children}
     </a>
   );
