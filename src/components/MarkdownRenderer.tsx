@@ -9,6 +9,7 @@ import "katex/dist/katex.min.css";
 import { Copy, Check } from "lucide-react";
 import { useState } from "react";
 import { VisualBlockRenderer } from "./VisualBlocks";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 function CopyButton({ code }: { code: string }) {
   const [copied, setCopied] = useState(false);
@@ -109,28 +110,52 @@ function TableWrapper({ children, ...props }: React.ComponentProps<"table">) {
 }
 
 function CitationLink({ href, children, sources }: { href?: string; children?: React.ReactNode; sources?: Source[] }) {
+  const handleClick = (e: React.MouseEvent, url: string) => {
+    e.preventDefault();
+    openUrl(url).catch(() => window.open(url, "_blank"));
+  };
+
   // Detect our cite:N links
   if (href?.startsWith("cite:")) {
     const idx = parseInt(href.replace("cite:", ""), 10) - 1;
     const source = sources?.[idx];
-    const url = source?.url || "#";
+    const url = source?.url;
     const title = source?.title || `Source ${idx + 1}`;
+
+    if (!url) {
+      // No source URL available — render as inert superscript number
+      return (
+        <sup className="text-[10px] font-semibold text-[var(--color-text-secondary)] ml-[1px]">
+          {children}
+        </sup>
+      );
+    }
+
     return (
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
+      <sup
+        onClick={(e) => handleClick(e, url)}
         title={title}
-        className="inline-flex items-center justify-center min-w-[1.1em] h-[1.1em] px-[0.3em]
-                   rounded-full bg-[var(--color-accent)]/10 text-[var(--color-accent)]
-                   text-[0.65em] font-semibold no-underline hover:bg-[var(--color-accent)]/20
-                   align-super -ml-[0.1em] mr-[0.1em] transition-colors"
+        className="cursor-pointer text-[10px] font-semibold text-[var(--color-accent)]
+                   hover:underline ml-[1px]"
       >
         {children}
-      </a>
+      </sup>
     );
   }
-  return <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
+
+  // Regular links — also use openUrl for Tauri
+  const handleRegularClick = (e: React.MouseEvent) => {
+    if (href && (href.startsWith("http://") || href.startsWith("https://"))) {
+      e.preventDefault();
+      openUrl(href).catch(() => window.open(href, "_blank"));
+    }
+  };
+
+  return (
+    <a href={href} onClick={handleRegularClick} target="_blank" rel="noopener noreferrer">
+      {children}
+    </a>
+  );
 }
 
 // Replace citation patterns with markdown links
