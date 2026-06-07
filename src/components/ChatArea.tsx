@@ -811,8 +811,10 @@ export default function ChatArea() {
   const { messages, activeStreams, error, sendMessage, stopStreaming } =
     useChatStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const userHasScrolledUp = useRef(false);
   const isStreaming = activeStreams > 0;
 
   const isBusy =
@@ -822,8 +824,24 @@ export default function ChatArea() {
         m.evalPhase === "evaluating" || m.evalPhase === "revising",
     );
 
+  // Track if user has scrolled away from bottom
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    function handleScroll() {
+      if (!container) return;
+      const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+      userHasScrolledUp.current = distanceFromBottom > 80;
+    }
+    container.addEventListener("scroll", handleScroll);
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  // Only auto-scroll if user hasn't scrolled up
+  useEffect(() => {
+    if (!userHasScrolledUp.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages]);
 
   useEffect(() => {
@@ -853,6 +871,7 @@ export default function ChatArea() {
   function handleSend() {
     const trimmed = input.trim();
     if ((!trimmed && pendingAttachments.length === 0) || isBusy) return;
+    userHasScrolledUp.current = false;
     setInput("");
     const attachments = pendingAttachments.length > 0 ? [...pendingAttachments] : undefined;
     setPendingAttachments([]);
@@ -1014,7 +1033,7 @@ Research question: ${trimmed}`;
   return (
     <div className="flex-1 flex flex-col h-full min-h-0">
       {/* Message feed */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto" ref={scrollContainerRef}>
         {!hasMessages ? (
           <div className="h-full flex flex-col items-center justify-center">
             <div className="text-center px-6 mb-8">
