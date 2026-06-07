@@ -33,7 +33,11 @@ export interface DriveTokens {
   expiresAt: number; // unix ms
 }
 
+let oauthState: string | null = null;
+
 export function buildAuthUrl(clientId: string): string {
+  // Generate CSRF protection state parameter
+  oauthState = crypto.randomUUID();
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: REDIRECT_URI,
@@ -41,8 +45,13 @@ export function buildAuthUrl(clientId: string): string {
     scope: SCOPES,
     access_type: "offline",
     prompt: "consent",
+    state: oauthState,
   });
   return `${GOOGLE_AUTH_URL}?${params.toString()}`;
+}
+
+export function getOAuthState(): string | null {
+  return oauthState;
 }
 
 export async function exchangeCodeForTokens(

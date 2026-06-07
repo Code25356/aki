@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import {
   MessageSquare,
   Brain,
@@ -24,6 +24,8 @@ interface SidebarProps {
   onToggle: () => void;
   activeView: AppView;
   onViewChange: (view: AppView) => void;
+  width: number;
+  onResize: (width: number) => void;
 }
 
 function formatDate(ts: number): string {
@@ -36,7 +38,7 @@ function formatDate(ts: number): string {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-export default function Sidebar({ collapsed, onToggle, activeView, onViewChange }: SidebarProps) {
+export default function Sidebar({ collapsed, onToggle, activeView, onViewChange, width, onResize }: SidebarProps) {
   const {
     currentThreadId,
     threads,
@@ -56,6 +58,33 @@ export default function Sidebar({ collapsed, onToggle, activeView, onViewChange 
   } = useCanvasStore();
 
   const [searchQuery, setSearchQuery] = useState("");
+  const isResizing = useRef(false);
+
+  const startResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizing.current = true;
+    const startX = e.clientX;
+    const startWidth = width;
+
+    function onMouseMove(ev: MouseEvent) {
+      if (!isResizing.current) return;
+      const newWidth = Math.min(400, Math.max(200, startWidth + (ev.clientX - startX)));
+      onResize(newWidth);
+    }
+
+    function onMouseUp() {
+      isResizing.current = false;
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    }
+
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+  }, [width, onResize]);
 
   const filteredThreads = useMemo(() => {
     if (!searchQuery.trim()) return threads;
@@ -73,20 +102,21 @@ export default function Sidebar({ collapsed, onToggle, activeView, onViewChange 
 
   return (
     <aside
-      className={`flex flex-col h-full bg-[var(--color-sidebar-bg)] backdrop-blur-xl
+      className={`relative flex flex-col h-full bg-[var(--color-sidebar-bg)] backdrop-blur-xl
                    border-r border-[var(--color-sidebar-border)]
-                   transition-all duration-200 ease-in-out shrink-0
-                   ${collapsed ? "w-0 min-w-0 overflow-hidden" : "w-[260px] min-w-[260px]"}`}
+                   shrink-0
+                   ${collapsed ? "w-0 min-w-0 overflow-hidden transition-all duration-200 ease-in-out" : ""}`}
+      style={collapsed ? undefined : { width: `${width}px`, minWidth: `${width}px` }}
     >
       {/* Spacer for traffic lights + top padding */}
       <div className="shrink-0" style={{ height: "calc(var(--titlebar-height) + 4px)" }} />
 
       {/* Nav tabs */}
-      <div className="flex items-center gap-1 px-3 pb-3 overflow-x-auto scrollbar-none flex-wrap">
+      <div className="flex items-center gap-1 px-4 pb-3 overflow-x-auto scrollbar-none flex-wrap">
         <button
           onClick={() => onViewChange("chats")}
-          className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-[12px] font-medium
-                     transition-colors cursor-pointer shrink-0
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12.5px] font-medium
+                     transition-all duration-150 cursor-pointer shrink-0
                      ${activeView === "chats"
                        ? "bg-[var(--color-hover)] text-[var(--color-text-primary)]"
                        : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
@@ -97,8 +127,8 @@ export default function Sidebar({ collapsed, onToggle, activeView, onViewChange 
         </button>
         <button
           onClick={() => onViewChange("brain")}
-          className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-[12px] font-medium
-                     transition-colors cursor-pointer shrink-0
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12.5px] font-medium
+                     transition-all duration-150 cursor-pointer shrink-0
                      ${activeView === "brain"
                        ? "bg-[var(--color-hover)] text-[var(--color-text-primary)]"
                        : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
@@ -109,8 +139,8 @@ export default function Sidebar({ collapsed, onToggle, activeView, onViewChange 
         </button>
         <button
           onClick={() => onViewChange("docs")}
-          className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-[12px] font-medium
-                     transition-colors cursor-pointer shrink-0
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12.5px] font-medium
+                     transition-all duration-150 cursor-pointer shrink-0
                      ${activeView === "docs"
                        ? "bg-[var(--color-hover)] text-[var(--color-text-primary)]"
                        : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
@@ -121,8 +151,8 @@ export default function Sidebar({ collapsed, onToggle, activeView, onViewChange 
         </button>
         <button
           onClick={() => onViewChange("canvas")}
-          className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-[12px] font-medium
-                     transition-colors cursor-pointer shrink-0
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12.5px] font-medium
+                     transition-all duration-150 cursor-pointer shrink-0
                      ${activeView === "canvas"
                        ? "bg-[var(--color-hover)] text-[var(--color-text-primary)]"
                        : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
@@ -133,8 +163,8 @@ export default function Sidebar({ collapsed, onToggle, activeView, onViewChange 
         </button>
         <button
           onClick={() => onViewChange("meeting")}
-          className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-[12px] font-medium
-                     transition-colors cursor-pointer shrink-0
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12.5px] font-medium
+                     transition-all duration-150 cursor-pointer shrink-0
                      ${activeView === "meeting"
                        ? "bg-[var(--color-hover)] text-[var(--color-text-primary)]"
                        : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
@@ -145,8 +175,8 @@ export default function Sidebar({ collapsed, onToggle, activeView, onViewChange 
         </button>
         <button
           onClick={() => onViewChange("tools")}
-          className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-[12px] font-medium
-                     transition-colors cursor-pointer shrink-0
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12.5px] font-medium
+                     transition-all duration-150 cursor-pointer shrink-0
                      ${activeView === "tools"
                        ? "bg-[var(--color-hover)] text-[var(--color-text-primary)]"
                        : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
@@ -157,8 +187,8 @@ export default function Sidebar({ collapsed, onToggle, activeView, onViewChange 
         </button>
         <button
           onClick={() => onViewChange("talk")}
-          className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-[12px] font-medium
-                     transition-colors cursor-pointer shrink-0
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12.5px] font-medium
+                     transition-all duration-150 cursor-pointer shrink-0
                      ${activeView === "talk"
                        ? "bg-[var(--color-hover)] text-[var(--color-text-primary)]"
                        : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
@@ -179,15 +209,15 @@ export default function Sidebar({ collapsed, onToggle, activeView, onViewChange 
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto px-5 pb-3">
+      <div className="flex-1 overflow-y-auto px-3 pb-3">
         {activeView === "chats" ? (
           <div className="space-y-0.5">
             <button
               onClick={() => { newChat(); onViewChange("chats"); }}
-              className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-[13px]
+              className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-[13px]
                          text-[var(--color-accent)] font-medium
-                         hover:bg-[var(--color-hover)]
-                         transition-colors cursor-pointer"
+                         hover:bg-[var(--color-accent)]/8
+                         transition-all duration-150 cursor-pointer"
             >
               <Plus size={15} strokeWidth={2.5} />
               New Chat
@@ -203,11 +233,11 @@ export default function Sidebar({ collapsed, onToggle, activeView, onViewChange 
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search chats…"
-                    className="w-full pl-8 pr-7 py-1.5 rounded-lg text-[12px]
-                               bg-[var(--color-hover)] border border-[var(--color-sidebar-border)]
-                               placeholder:text-[var(--color-text-secondary)]
-                               outline-none focus:border-[var(--color-accent)]
-                               transition-colors"
+                    className="w-full pl-8 pr-7 py-2 rounded-lg text-[13px]
+                               bg-[var(--color-hover)] border border-transparent
+                               placeholder:text-[var(--color-text-secondary)] placeholder:opacity-70
+                               outline-none focus:border-[var(--color-accent)]/40 focus:bg-[var(--color-surface)]
+                               transition-all duration-150"
                   />
                   {searchQuery && (
                     <button
@@ -226,9 +256,9 @@ export default function Sidebar({ collapsed, onToggle, activeView, onViewChange 
             {filteredThreads.map((thread) => (
               <div
                 key={thread.id}
-                className={`group flex items-center rounded-lg transition-colors
+                className={`group flex items-center rounded-xl transition-all duration-150
                   ${currentThreadId === thread.id
-                    ? "bg-[var(--color-hover)]"
+                    ? "bg-[var(--color-hover)] shadow-[0_0_0_1px_var(--color-sidebar-border)]"
                     : "hover:bg-[var(--color-hover)]"
                   }`}
               >
@@ -236,8 +266,8 @@ export default function Sidebar({ collapsed, onToggle, activeView, onViewChange 
                   onClick={() => { loadThread(thread.id); onViewChange("chats"); }}
                   className="flex-1 text-left px-3 py-2.5 min-w-0 cursor-pointer"
                 >
-                  <div className="truncate text-[13px] leading-snug">{thread.title}</div>
-                  <div className="flex items-center gap-1.5 text-[11px] text-[var(--color-text-secondary)] mt-0.5">
+                  <div className={`truncate text-[13px] leading-snug ${currentThreadId === thread.id ? "font-medium" : ""}`}>{thread.title}</div>
+                  <div className="flex items-center gap-1.5 text-[11px] text-[var(--color-text-secondary)] opacity-70 mt-0.5">
                     <span>{formatDate(thread.updatedAt)}</span>
                     {thread.models.length > 0 && (
                       <>
@@ -350,6 +380,16 @@ export default function Sidebar({ collapsed, onToggle, activeView, onViewChange 
           </div>
         )}
       </div>
+
+      {/* Drag handle for resizing */}
+      {!collapsed && (
+        <div
+          onMouseDown={startResize}
+          className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize
+                     hover:bg-[var(--color-accent)]/30 active:bg-[var(--color-accent)]/50
+                     transition-colors z-10"
+        />
+      )}
     </aside>
   );
 }

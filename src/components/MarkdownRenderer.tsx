@@ -68,7 +68,7 @@ function CodeBlock({ className, children, ...props }: React.ComponentProps<"code
   return (
     <div className="relative group">
       {language !== "text" && (
-        <span className="absolute top-2 left-3 text-xs text-gray-400 font-mono opacity-70">
+        <span className="absolute top-2 left-3 text-[11px] text-gray-400 font-mono opacity-80 tracking-wide uppercase">
           {language}
         </span>
       )}
@@ -79,9 +79,9 @@ function CodeBlock({ className, children, ...props }: React.ComponentProps<"code
         PreTag="div"
         customStyle={{
           margin: 0,
-          borderRadius: "0.5rem",
-          padding: "2rem 1rem 1rem 1rem",
-          fontSize: "0.85rem",
+          borderRadius: "10px",
+          padding: "1.6rem 1rem 1rem 1rem",
+          fontSize: "13px",
         }}
       >
         {code}
@@ -90,14 +90,62 @@ function CodeBlock({ className, children, ...props }: React.ComponentProps<"code
   );
 }
 
-interface MarkdownRendererProps {
-  content: string;
+interface Source {
+  url: string;
+  title: string;
 }
 
-export const MarkdownRenderer = memo(function MarkdownRenderer({ content }: MarkdownRendererProps) {
+interface MarkdownRendererProps {
+  content: string;
+  sources?: Source[];
+}
+
+function TableWrapper({ children, ...props }: React.ComponentProps<"table">) {
+  return (
+    <div className="overflow-x-auto rounded-lg border border-[var(--color-sidebar-border)] my-3">
+      <table {...props}>{children}</table>
+    </div>
+  );
+}
+
+function CitationLink({ href, children, sources }: { href?: string; children?: React.ReactNode; sources?: Source[] }) {
+  // Detect our cite:N links
+  if (href?.startsWith("cite:")) {
+    const idx = parseInt(href.replace("cite:", ""), 10) - 1;
+    const source = sources?.[idx];
+    const url = source?.url || "#";
+    const title = source?.title || `Source ${idx + 1}`;
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        title={title}
+        className="inline-flex items-center justify-center min-w-[1.1em] h-[1.1em] px-[0.3em]
+                   rounded-full bg-[var(--color-accent)]/10 text-[var(--color-accent)]
+                   text-[0.65em] font-semibold no-underline hover:bg-[var(--color-accent)]/20
+                   align-super -ml-[0.1em] mr-[0.1em] transition-colors"
+      >
+        {children}
+      </a>
+    );
+  }
+  return <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
+}
+
+// Replace 【N】 patterns with markdown links (fullwidth brackets from search citations)
+function preprocessCitations(content: string): string {
+  return content.replace(/【(\d+)】/g, (_, num) => `[${num}](cite:${num})`);
+}
+
+export const MarkdownRenderer = memo(function MarkdownRenderer({ content, sources }: MarkdownRendererProps) {
+  const processed = preprocessCitations(content);
+
   const components = useCallback(() => ({
     code: CodeBlock,
-  }), []);
+    table: TableWrapper,
+    a: (props: React.ComponentProps<"a">) => <CitationLink {...props} sources={sources} />,
+  }), [sources]);
 
   return (
     <ReactMarkdown
@@ -105,7 +153,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({ content }: Mark
       rehypePlugins={[rehypeKatex]}
       components={components()}
     >
-      {content}
+      {processed}
     </ReactMarkdown>
   );
 });

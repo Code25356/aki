@@ -86,6 +86,11 @@ fn build_path() -> String {
     paths.join(":")
 }
 
+/// Allowed base commands for MCP server spawning (security whitelist).
+const ALLOWED_COMMANDS: &[&str] = &[
+    "node", "npx", "python", "python3", "uvx", "uv", "docker", "deno", "bun",
+];
+
 /// Spawn an MCP server as a child process communicating over stdio.
 #[tauri::command]
 pub async fn mcp_spawn(
@@ -95,6 +100,16 @@ pub async fn mcp_spawn(
     args: Vec<String>,
     env: HashMap<String, String>,
 ) -> Result<String, String> {
+    // Security: only allow known safe commands
+    let base_cmd = command.split('/').last().unwrap_or(&command);
+    if !ALLOWED_COMMANDS.iter().any(|&allowed| base_cmd == allowed) {
+        return Err(format!(
+            "Command '{}' is not allowed. Allowed: {}",
+            command,
+            ALLOWED_COMMANDS.join(", ")
+        ));
+    }
+
     let resolved_cmd = resolve_command(&command);
     let full_path = build_path();
 
@@ -198,8 +213,20 @@ pub async fn mcp_stop(
 }
 
 /// Install an npm MCP server package (caches it locally via npx).
+/// Only allows valid npm package names to prevent command injection.
 #[tauri::command]
 pub async fn mcp_install(package_name: String) -> Result<String, String> {
+    // Validate package name: must match npm naming rules (letters, digits, hyphens, dots, slashes for scoped)
+    let valid = package_name.chars().all(|c| {
+        c.is_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '/' || c == '@'
+    }) && !package_name.is_empty()
+      && !package_name.contains("..")
+      && !package_name.starts_with('-');
+
+    if !valid {
+        return Err(format!("Invalid package name: '{}'", package_name));
+    }
+
     // Use npx -y to download and cache the package without running it
     let output = Command::new("npx")
         .args(["-y", "--package", &package_name, "echo", "installed"])

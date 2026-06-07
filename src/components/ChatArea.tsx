@@ -189,35 +189,37 @@ function SourcesSection({ sources }: { sources: SearchSource[] }) {
   if (!sources?.length) return null;
 
   return (
-    <div className="mt-3 border-t border-[var(--color-sidebar-border)] pt-2">
+    <div className="mt-4 pt-1">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-1 text-[11px] text-[var(--color-text-secondary)]
+        className="flex items-center gap-1.5 text-[12px] text-[var(--color-text-secondary)]
                    hover:text-[var(--color-text-primary)] transition-colors cursor-pointer"
       >
         {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-        <Globe size={11} />
+        <Globe size={12} />
         <span>{sources.length} source{sources.length > 1 ? "s" : ""}</span>
       </button>
 
       {expanded && (
-        <div className="mt-2 space-y-1.5">
+        <div className="mt-2 space-y-1">
           {sources.map((s, i) => (
             <a
               key={i}
               href={s.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-start gap-2 px-2.5 py-1.5 rounded-lg
+              className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg
                          hover:bg-[var(--color-hover)] transition-colors text-[12px] group"
             >
-              <span className="font-medium text-[var(--color-accent)] shrink-0">[{i + 1}]</span>
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full
+                               bg-[var(--color-accent)]/10 text-[var(--color-accent)]
+                               text-[10px] font-semibold shrink-0">{i + 1}</span>
               <div className="min-w-0">
                 <div className="font-medium text-[var(--color-text-primary)] group-hover:text-[var(--color-accent)] truncate">
                   {s.title}
                 </div>
                 <div className="text-[var(--color-text-secondary)] truncate text-[11px]">
-                  {s.url}
+                  {new URL(s.url).hostname.replace("www.", "")}
                 </div>
               </div>
             </a>
@@ -360,19 +362,21 @@ function AttachmentPreview({ attachments }: { attachments: Attachment[] }) {
 function MessageBubble({ msg }: { msg: Message }) {
   const { togglePin, forkThread } = useChatStore();
   return (
-    <div className="group/msg flex gap-3">
+    <div className={`group/msg flex gap-3 ${
+      msg.role === "user" ? "bg-[var(--color-msg-user)] rounded-2xl px-4 py-3.5 -mx-4" : ""
+    }`}>
       <div
-        className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5
+        className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5
           ${msg.role === "user"
             ? "bg-[var(--color-accent)] text-white"
-            : "bg-[var(--color-hover)] text-[var(--color-text-secondary)]"
+            : "text-[var(--color-text-secondary)]"
           }`}
       >
-        {msg.role === "user" ? <User size={14} /> : <Bot size={14} />}
+        {msg.role === "user" ? <User size={13} /> : <Bot size={14} />}
       </div>
       <div className="flex-1 min-w-0 pr-2">
         <div className="flex items-center gap-2 mb-0.5">
-          <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">
+          <span className="text-[11px] font-medium text-[var(--color-text-secondary)] opacity-80">
             {msg.role === "user" ? "You" : msg.model || "Assistant"}
           </span>
           {msg.pinned && (
@@ -391,7 +395,7 @@ function MessageBubble({ msg }: { msg: Message }) {
           </button>
           <button
             onClick={() => forkThread(msg.id)}
-            className="p-0.5 rounded transition-colors text-[var(--color-text-secondary)] opacity-0 group-hover/msg:opacity-100 hover:text-[var(--color-text)]"
+            className="p-0.5 rounded transition-all duration-150 text-[var(--color-text-secondary)] opacity-0 group-hover/msg:opacity-60 hover:!opacity-100 hover:text-[var(--color-text-primary)]"
             title="Fork conversation from here"
           >
             <GitBranch size={12} />
@@ -406,7 +410,7 @@ function MessageBubble({ msg }: { msg: Message }) {
                   utterance.rate = 1.1;
                   synth.speak(utterance);
                 }}
-                className="p-0.5 rounded transition-colors text-[var(--color-text-secondary)] opacity-0 group-hover/msg:opacity-100 hover:text-[var(--color-text)]"
+                className="p-0.5 rounded transition-all duration-150 text-[var(--color-text-secondary)] opacity-0 group-hover/msg:opacity-60 hover:!opacity-100 hover:text-[var(--color-text-primary)]"
                 title="Read aloud"
               >
                 <Volume2 size={12} />
@@ -416,7 +420,7 @@ function MessageBubble({ msg }: { msg: Message }) {
                   const text = msg.content.slice(0, 2000);
                   useMemoryStore.getState().addStyleExample(text);
                 }}
-                className="p-0.5 rounded transition-colors text-[var(--color-text-secondary)] opacity-0 group-hover/msg:opacity-100 hover:text-[var(--color-text)]"
+                className="p-0.5 rounded transition-all duration-150 text-[var(--color-text-secondary)] opacity-0 group-hover/msg:opacity-60 hover:!opacity-100 hover:text-[var(--color-text-primary)]"
                 title="Save as writing style example"
               >
                 <Palette size={12} />
@@ -431,7 +435,7 @@ function MessageBubble({ msg }: { msg: Message }) {
         </div>
         {/* Attachments */}
         {msg.attachments && <AttachmentPreview attachments={msg.attachments} />}
-        <div className="text-[13px] leading-relaxed break-words">
+        <div className="leading-relaxed break-words">
           {(() => {
             const activeResp = msg.responses && msg.responses.length > 1
               ? msg.responses[msg.activeResponseIdx ?? 0]
@@ -450,10 +454,10 @@ function MessageBubble({ msg }: { msg: Message }) {
                 )}
                 {msg.role === "assistant" && displayContent ? (
                   <div className="prose-chat">
-                    <MarkdownRenderer content={displayContent} />
+                    <MarkdownRenderer content={displayContent} sources={msg.sources} />
                   </div>
                 ) : (
-                  displayContent && <span className="whitespace-pre-wrap">{displayContent}</span>
+                  displayContent && <span className="whitespace-pre-wrap text-[15px] leading-[1.6]">{displayContent}</span>
                 )}
                 {isStreaming && displayContent.length === 0 && !displayError && (
                   <span className="inline-block w-2 h-4 bg-[var(--color-text-secondary)] animate-pulse rounded-sm" />
@@ -1037,8 +1041,8 @@ Research question: ${trimmed}`;
           </div>
         ) : (
           <div
-            className="mx-auto px-6 py-6 space-y-6"
-            style={{ maxWidth: "min(100%, 960px)" }}
+            className="mx-auto px-5 py-4 space-y-4"
+            style={{ maxWidth: "min(100%, 820px)" }}
           >
             {messages.map((msg) => (
               <MessageBubble key={msg.id} msg={msg} />
@@ -1053,8 +1057,8 @@ Research question: ${trimmed}`;
         <div className="px-6">
           <div
             className="mx-auto flex items-center gap-2 px-3 py-2 rounded-lg
-                        bg-red-500/10 text-red-500 text-[13px] mb-2"
-            style={{ maxWidth: "min(100%, 960px)" }}
+                        bg-red-500/10 text-red-500 text-sm mb-2"
+            style={{ maxWidth: "min(100%, 820px)" }}
           >
             <AlertCircle size={14} />
             {error}
@@ -1065,13 +1069,14 @@ Research question: ${trimmed}`;
       {/* Input area */}
       <div className="px-6 pb-5 pt-2">
         <div
-          className={`mx-auto rounded-2xl border transition-colors
-                      bg-[var(--color-hover)]
+          className={`mx-auto rounded-[20px] border transition-all duration-200
+                      bg-[var(--color-surface)]
+                      shadow-[0_0_0_1px_var(--color-sidebar-border),0_2px_8px_var(--color-elevated-shadow),0_1px_3px_var(--color-elevated-shadow)]
                       ${dragOver
-                        ? "border-[var(--color-accent)] bg-[var(--color-accent)]/5"
-                        : "border-[var(--color-sidebar-border)]"
+                        ? "border-[var(--color-accent)] !shadow-[0_0_0_2px_var(--color-accent),0_4px_12px_var(--color-elevated-shadow-md)]"
+                        : "border-transparent"
                       }`}
-          style={{ maxWidth: "min(100%, 720px)" }}
+          style={{ maxWidth: "min(100%, 820px)" }}
           onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}
@@ -1134,13 +1139,13 @@ Research question: ${trimmed}`;
           )}
 
           <PinnedDocsChips />
-          <div className="flex items-end gap-2 px-4 py-3">
+          <div className="flex items-end gap-1.5 px-4 py-3.5">
             {/* Attachment button */}
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="p-1.5 rounded-lg text-[var(--color-text-secondary)]
-                         hover:text-[var(--color-text-primary)] hover:bg-[var(--color-hover)]
-                         transition-colors cursor-pointer shrink-0 mb-0.5"
+              className="p-1.5 rounded-lg text-[var(--color-text-secondary)] opacity-55
+                         hover:opacity-100 hover:text-[var(--color-text-primary)] hover:bg-[var(--color-hover)]
+                         transition-all duration-150 cursor-pointer shrink-0 mb-0.5"
               title="Attach file or image"
             >
               <Paperclip size={16} />
@@ -1162,9 +1167,9 @@ Research question: ${trimmed}`;
             {/* Voice conversation mode */}
             <button
               onClick={() => setVoiceMode(true)}
-              className="p-1.5 rounded-lg text-[var(--color-text-secondary)]
-                         hover:text-[var(--color-text-primary)] hover:bg-[var(--color-hover)]
-                         transition-colors cursor-pointer shrink-0 mb-0.5"
+              className="p-1.5 rounded-lg text-[var(--color-text-secondary)] opacity-55
+                         hover:opacity-100 hover:text-[var(--color-text-primary)] hover:bg-[var(--color-hover)]
+                         transition-all duration-150 cursor-pointer shrink-0 mb-0.5"
               title="Voice Conversation mode"
             >
               <Volume2 size={16} />
@@ -1192,9 +1197,9 @@ Research question: ${trimmed}`;
                   await createFile(title, content, folderId, driveTokens, driveClientId, driveClientSecret, onRefresh, true);
                   alert(`Exported as "${title}" to Google Drive`);
                 }}
-                className="p-1.5 rounded-lg text-[var(--color-text-secondary)]
-                           hover:text-[var(--color-text-primary)] hover:bg-[var(--color-hover)]
-                           transition-colors cursor-pointer shrink-0 mb-0.5"
+                className="p-1.5 rounded-lg text-[var(--color-text-secondary)] opacity-55
+                           hover:opacity-100 hover:text-[var(--color-text-primary)] hover:bg-[var(--color-hover)]
+                           transition-all duration-150 cursor-pointer shrink-0 mb-0.5"
                 title="Export conversation to Google Doc"
               >
                 <Download size={16} />
@@ -1237,9 +1242,9 @@ Research question: ${trimmed}`;
                     },
                   });
                 }}
-                className="p-1.5 rounded-lg text-[var(--color-text-secondary)]
-                           hover:text-[var(--color-text-primary)] hover:bg-[var(--color-hover)]
-                           transition-colors cursor-pointer shrink-0 mb-0.5"
+                className="p-1.5 rounded-lg text-[var(--color-text-secondary)] opacity-55
+                           hover:opacity-100 hover:text-[var(--color-text-primary)] hover:bg-[var(--color-hover)]
+                           transition-all duration-150 cursor-pointer shrink-0 mb-0.5"
                 title="Distill conversation to Canvas"
               >
                 <FileEdit size={16} />
@@ -1279,8 +1284,8 @@ Research question: ${trimmed}`;
               onPaste={handlePaste}
               placeholder="Message Aki..."
               rows={1}
-              className="flex-1 bg-transparent resize-none outline-none text-[13px]
-                         placeholder:text-[var(--color-text-secondary)]
+              className="flex-1 bg-transparent resize-none outline-none text-[15px]
+                         placeholder:text-[var(--color-text-secondary)] placeholder:opacity-60
                          max-h-32 leading-relaxed"
             />
             {/* Canvas mode toggle */}

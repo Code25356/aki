@@ -1,7 +1,6 @@
 import { useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
-import { relaunch } from "@tauri-apps/plugin-process";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useMemoryStore, type VoicePreset } from "../store/memoryStore";
 import { useModelStore, MODELS } from "../store/modelStore";
@@ -18,7 +17,6 @@ import {
   DollarSign,
   Settings,
   RotateCcw,
-  Download,
   Loader2,
   CheckCircle2,
   ChevronRight,
@@ -72,32 +70,11 @@ export default function BrainView() {
 
   const [showKey, setShowKey] = useState(false);
   const [showMemoryPanel, setShowMemoryPanel] = useState(false);
-  const [updating, setUpdating] = useState(false);
-  const [updateStatus, setUpdateStatus] = useState<string | null>(null);
-  const [updateError, setUpdateError] = useState<string | null>(null);
   const [driveConnecting, setDriveConnecting] = useState(false);
   const [driveError, setDriveError] = useState<string | null>(null);
   const [showVoiceCreator, setShowVoiceCreator] = useState(false);
   const [expandedVoice, setExpandedVoice] = useState<string | null>(null);
 
-  async function handleUpdate() {
-    setUpdating(true);
-    setUpdateStatus("Building from source…");
-    setUpdateError(null);
-    try {
-      const result = await invoke<string>("rebuild_app");
-      setUpdateStatus(result);
-      setTimeout(async () => {
-        setUpdateStatus("Restarting…");
-        await relaunch();
-      }, 1500);
-    } catch (err) {
-      setUpdateError(String(err));
-      setUpdateStatus(null);
-    } finally {
-      setUpdating(false);
-    }
-  }
 
   async function handleDriveConnect() {
     if (!driveClientId || !driveClientSecret) {
@@ -691,43 +668,6 @@ export default function BrainView() {
           document.body,
         )}
 
-        {/* Update App */}
-        <div className="mb-8">
-          <label className="flex items-center gap-1.5 text-sm font-medium mb-2">
-            <Download size={14} className="text-[var(--color-accent)]" />
-            Update App
-          </label>
-          <p className="text-xs text-[var(--color-text-secondary)] mb-3">
-            Rebuild from source and install the latest version.
-          </p>
-          <button
-            onClick={handleUpdate}
-            disabled={updating}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium
-                       bg-[var(--color-accent)] text-white
-                       hover:opacity-90 transition-opacity cursor-pointer
-                       disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {updating ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : (
-              <Download size={14} />
-            )}
-            {updating ? "Updating…" : "Update & Restart"}
-          </button>
-          {updateStatus && (
-            <div className="flex items-center gap-1.5 mt-2 text-[12px] text-green-600">
-              <CheckCircle2 size={13} />
-              {updateStatus}
-            </div>
-          )}
-          {updateError && (
-            <div className="mt-2 px-3 py-2 rounded-lg bg-red-500/10 text-red-500 text-[12px]
-                            max-h-32 overflow-y-auto whitespace-pre-wrap">
-              {updateError}
-            </div>
-          )}
-        </div>
 
         <div className="px-3 py-2 rounded-lg bg-[var(--color-hover)] text-xs text-[var(--color-text-secondary)]">
           Saved to local storage. Your data never leaves this device.

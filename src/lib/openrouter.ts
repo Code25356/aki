@@ -94,7 +94,7 @@ If no new facts, return NONE. Keep each fact under 15 words.${existing}`,
     }
 
     const text = data.choices?.[0]?.message?.content?.trim() || "";
-    console.log("[Aki:memory] Raw response:", JSON.stringify(text));
+    console.log("[Aki:memory] Got response, length:", text.length);
 
     if (!text || text.toUpperCase() === "NONE") return [];
 
@@ -123,7 +123,7 @@ If no new facts, return NONE. Keep each fact under 15 words.${existing}`,
       (entry: ExtractedMemory) => !existingLower.has(entry.fact.toLowerCase()),
     );
 
-    console.log("[Aki:memory] Extracted facts:", unique.map((e: ExtractedMemory) => e.fact));
+    console.log("[Aki:memory] Extracted", unique.length, "new facts");
     return unique;
   } catch (err) {
     console.error("[Aki:memory] Exception:", err);

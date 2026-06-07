@@ -264,6 +264,24 @@ export const useMemoryStore = create<MemoryState>()(
     }),
     {
       name: "aki-memory",
+      storage: {
+        getItem: (name) => {
+          const raw = localStorage.getItem(name);
+          if (!raw) return null;
+          try {
+            // Decode obfuscated storage
+            return JSON.parse(atob(raw));
+          } catch {
+            // Fallback: try plain JSON (migration from unencoded)
+            try { return JSON.parse(raw); } catch { return null; }
+          }
+        },
+        setItem: (name, value) => {
+          // Obfuscate to prevent casual reading of secrets
+          localStorage.setItem(name, btoa(JSON.stringify(value)));
+        },
+        removeItem: (name) => localStorage.removeItem(name),
+      },
     },
   ),
 );

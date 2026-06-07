@@ -34,6 +34,7 @@ function CanvasView() {
 
 function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(260);
   const [activeView, setActiveView] = useState<AppView>("chats");
   const [searchOpen, setSearchOpen] = useState(false);
   const [splitCanvas, setSplitCanvas] = useState(false);
@@ -104,6 +105,8 @@ function App() {
         onToggle={() => setSidebarCollapsed(true)}
         activeView={activeView}
         onViewChange={setActiveView}
+        width={sidebarWidth}
+        onResize={setSidebarWidth}
       />
       <div className="flex-1 flex flex-col min-w-0">
         <Header />

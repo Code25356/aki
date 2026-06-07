@@ -1,30 +1,36 @@
 @import "tailwindcss";
 
 @theme {
-  --color-sidebar-bg: rgba(246, 246, 248, 0.85);
-  --color-sidebar-border: rgba(0, 0, 0, 0.08);
-  --color-header-bg: rgba(255, 255, 255, 0.85);
+  --color-sidebar-bg: rgba(244, 244, 246, 0.95);
+  --color-sidebar-border: rgba(0, 0, 0, 0.06);
+  --color-header-bg: rgba(252, 252, 253, 0.9);
   --color-chat-bg: #fafafa;
   --color-text-primary: #1d1d1f;
-  --color-text-secondary: #86868b;
+  --color-text-secondary: #6e6e73;
   --color-accent: #007aff;
-  --color-hover: rgba(0, 0, 0, 0.04);
+  --color-hover: rgba(0, 0, 0, 0.045);
   --color-surface: #ffffff;
+  --color-msg-user: rgba(0, 0, 0, 0.032);
+  --color-elevated-shadow: rgba(0, 0, 0, 0.04);
+  --color-elevated-shadow-md: rgba(0, 0, 0, 0.06);
   --titlebar-height: 52px;
   --traffic-light-width: 76px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-sidebar-bg: rgba(30, 30, 32, 0.85);
+    --color-sidebar-bg: rgba(24, 24, 26, 0.95);
     --color-sidebar-border: rgba(255, 255, 255, 0.08);
-    --color-header-bg: rgba(28, 28, 30, 0.85);
-    --color-chat-bg: #161617;
+    --color-header-bg: rgba(20, 20, 22, 0.9);
+    --color-chat-bg: #101011;
     --color-text-primary: #f5f5f7;
     --color-text-secondary: #98989d;
     --color-accent: #0a84ff;
-    --color-hover: rgba(255, 255, 255, 0.06);
+    --color-hover: rgba(255, 255, 255, 0.065);
     --color-surface: #1c1c1e;
+    --color-msg-user: rgba(255, 255, 255, 0.035);
+    --color-elevated-shadow: rgba(0, 0, 0, 0.3);
+    --color-elevated-shadow-md: rgba(0, 0, 0, 0.4);
   }
 }
 
@@ -48,6 +54,9 @@
     background-color: var(--color-chat-bg);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    font-optical-sizing: auto;
+    font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1;
+    font-kerning: auto;
   }
 
   ::selection {
@@ -66,55 +75,86 @@
   }
 }
 
-/* Markdown prose styles for chat messages */
+/* Markdown prose styles for chat messages — Apple-quality typography */
 @layer components {
   .prose-chat {
-    font-size: 13px;
-    line-height: 1.7;
+    font-size: 15px;
+    line-height: 1.6;
     color: var(--color-text-primary);
+    text-wrap: pretty;
+    font-kerning: auto;
+    font-variant-numeric: proportional-nums;
+    letter-spacing: -0.003em;
   }
 
-  .prose-chat h1,
-  .prose-chat h2,
-  .prose-chat h3,
-  .prose-chat h4 {
-    font-weight: 600;
-    margin-top: 1.2em;
+  /* Heading hierarchy — Minor Third scale, tighter tracking at larger sizes */
+  .prose-chat h1 {
+    font-size: 1.45em;
+    font-weight: 650;
+    letter-spacing: -0.02em;
+    margin-top: 1.3em;
     margin-bottom: 0.4em;
+    line-height: 1.2;
+    text-wrap: balance;
+  }
+
+  .prose-chat h2 {
+    font-size: 1.25em;
+    font-weight: 620;
+    letter-spacing: -0.015em;
+    margin-top: 1.2em;
+    margin-bottom: 0.35em;
+    line-height: 1.25;
+    text-wrap: balance;
+  }
+
+  .prose-chat h3 {
+    font-size: 1.1em;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin-top: 1.0em;
+    margin-bottom: 0.3em;
     line-height: 1.3;
   }
 
-  .prose-chat h1 { font-size: 1.25em; }
-  .prose-chat h2 { font-size: 1.15em; }
-  .prose-chat h3 { font-size: 1.05em; }
-  .prose-chat h4 { font-size: 1em; }
+  .prose-chat h4 {
+    font-size: 1em;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    margin-top: 1.2em;
+    margin-bottom: 0.35em;
+    line-height: 1.35;
+  }
 
   .prose-chat > *:first-child {
     margin-top: 0;
   }
 
+  /* Paragraph spacing */
   .prose-chat p {
-    margin-top: 0.6em;
-    margin-bottom: 0.6em;
+    margin-top: 0.55em;
+    margin-bottom: 0.55em;
   }
 
   .prose-chat > p:first-child {
     margin-top: 0;
   }
 
+  /* Weight spectrum — not full bold */
   .prose-chat strong {
-    font-weight: 600;
+    font-weight: 580;
   }
 
   .prose-chat em {
     font-style: italic;
   }
 
+  /* Lists — scannable with muted markers */
   .prose-chat ul,
   .prose-chat ol {
     margin-top: 0.4em;
     margin-bottom: 0.4em;
-    padding-left: 1.5em;
+    padding-left: 1.4em;
   }
 
   .prose-chat ul {
@@ -126,30 +166,37 @@
   }
 
   .prose-chat li {
-    margin-top: 0.2em;
-    margin-bottom: 0.2em;
-  }
-
-  .prose-chat li > ul,
-  .prose-chat li > ol {
     margin-top: 0.15em;
     margin-bottom: 0.15em;
   }
 
-  .prose-chat code {
-    font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
-    font-size: 0.9em;
-    padding: 0.15em 0.35em;
-    border-radius: 4px;
-    background: var(--color-hover);
-    border: 1px solid var(--color-sidebar-border);
+  .prose-chat li::marker {
+    color: var(--color-text-secondary);
   }
 
+  .prose-chat li > ul,
+  .prose-chat li > ol {
+    margin-top: 0.2em;
+    margin-bottom: 0.2em;
+  }
+
+  /* Inline code — subtle, not distracting */
+  .prose-chat code {
+    font-family: "SF Mono", "JetBrains Mono", ui-monospace, monospace;
+    font-size: 0.87em;
+    padding: 0.15em 0.4em;
+    border-radius: 5px;
+    background: var(--color-hover);
+    border: 1px solid var(--color-sidebar-border);
+    font-variant-ligatures: none;
+  }
+
+  /* Code blocks */
   .prose-chat pre {
-    margin-top: 0.8em;
-    margin-bottom: 0.8em;
+    margin-top: 1em;
+    margin-bottom: 1em;
     padding: 0.75em 1em;
-    border-radius: 8px;
+    border-radius: 10px;
     background: var(--color-hover);
     border: 1px solid var(--color-sidebar-border);
     overflow-x: auto;
@@ -159,45 +206,59 @@
     padding: 0;
     border: none;
     background: none;
-    font-size: 12px;
-    line-height: 1.5;
+    font-size: 13px;
+    line-height: 1.55;
   }
 
+  /* Blockquotes — modern, no italic, subtle bg */
   .prose-chat blockquote {
-    margin-top: 0.6em;
-    margin-bottom: 0.6em;
-    padding-left: 1em;
+    margin-top: 0.8em;
+    margin-bottom: 0.8em;
+    padding: 0.6em 1em;
     border-left: 3px solid var(--color-accent);
-    color: var(--color-text-secondary);
+    background: var(--color-hover);
+    border-radius: 0 6px 6px 0;
+    color: var(--color-text-primary);
   }
 
+  /* Horizontal rules — breathing room */
   .prose-chat hr {
-    margin-top: 1em;
-    margin-bottom: 1em;
+    margin-top: 1.5em;
+    margin-bottom: 1.5em;
     border: none;
     border-top: 1px solid var(--color-sidebar-border);
   }
 
+  /* Tables — minimal borders, aligned numbers */
   .prose-chat table {
-    width: 100%;
-    margin-top: 0.6em;
-    margin-bottom: 0.6em;
+    width: max-content;
+    min-width: 100%;
     border-collapse: collapse;
-    font-size: 12px;
-  }
-
-  .prose-chat th,
-  .prose-chat td {
-    padding: 0.4em 0.75em;
-    border: 1px solid var(--color-sidebar-border);
-    text-align: left;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
   }
 
   .prose-chat th {
-    font-weight: 600;
-    background: var(--color-hover);
+    font-weight: 550;
+    text-align: left;
+    padding: 0.6em 0.85em;
+    border-bottom: 2px solid var(--color-sidebar-border);
+    color: var(--color-text-secondary);
+    font-size: 0.85em;
+    letter-spacing: 0.02em;
   }
 
+  .prose-chat td {
+    padding: 0.55em 0.85em;
+    border-bottom: 1px solid var(--color-sidebar-border);
+    text-align: left;
+  }
+
+  .prose-chat tr:last-child td {
+    border-bottom: none;
+  }
+
+  /* Links */
   .prose-chat a {
     color: var(--color-accent);
     text-decoration: none;

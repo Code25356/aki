@@ -22,79 +22,46 @@ fn extract_pdf_text(base64_data: String) -> Result<String, String> {
     }
 }
 
-#[cfg(target_os = "macos")]
-#[tauri::command]
-async fn rebuild_app() -> Result<String, String> {
-    use std::process::Command;
-
-    let source_dir = std::path::PathBuf::from("/Users/avajpayee/AI/aichat");
-
-    // Pull latest code from remote
-    let pull_output = Command::new("git")
-        .args(["pull", "--ff-only"])
-        .current_dir(&source_dir)
-        .output()
-        .map_err(|e| format!("Failed to run git pull: {}", e))?;
-
-    if !pull_output.status.success() {
-        let stderr = String::from_utf8_lossy(&pull_output.stderr).to_string();
-        return Err(format!("Git pull failed:\n{}", stderr));
-    }
-
-    let output = Command::new("/bin/zsh")
-        .args([
-            "-l",
-            "-c",
-            &format!(
-                "cd '{}' && source \"$HOME/.cargo/env\" 2>/dev/null; source \"$HOME/.nvm/nvm.sh\" 2>/dev/null; export PATH=\"$HOME/.nvm/versions/node/$(nvm current)/bin:$PATH\" 2>/dev/null; npm run tauri build 2>&1",
-                source_dir.display()
-            ),
-        ])
-        .output()
-        .map_err(|e| format!("Failed to start build: {}", e))?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-
-    if !output.status.success() {
-        return Err(format!("Build failed:\n{}\n{}", stdout, stderr));
-    }
-
-    let app_source = source_dir.join("src-tauri/target/release/bundle/macos/Aki.app");
-    let app_dest = std::path::PathBuf::from("/Applications/Aki.app");
-
-    if app_dest.exists() {
-        std::fs::remove_dir_all(&app_dest)
-            .map_err(|e| format!("Failed to remove old app: {}", e))?;
-    }
-
-    let cp_output = Command::new("cp")
-        .args(["-R", &app_source.to_string_lossy(), &app_dest.to_string_lossy()])
-        .output()
-        .map_err(|e| format!("Failed to copy app: {}", e))?;
-
-    if !cp_output.status.success() {
-        return Err(format!(
-            "Failed to install app: {}",
-            String::from_utf8_lossy(&cp_output.stderr)
-        ));
-    }
-
-    Ok("Build and install successful!".to_string())
-}
-
-#[cfg(not(target_os = "macos"))]
-#[tauri::command]
-async fn rebuild_app() -> Result<String, String> {
-    Err("Rebuild is only supported on macOS.".to_string())
-}
+// rebuild_app removed — was a security risk (arbitrary code execution via IPC)
 
 /// Fetch a URL from the Rust side (bypasses CORS).
 /// Returns the response body as a string.
+/// Blocks private/internal IPs and non-HTTP(S) schemes to prevent SSRF.
 #[tauri::command]
 async fn fetch_url(url: String) -> Result<String, String> {
+    // Block non-HTTP(S) schemes
+    if !url.starts_with("https://") && !url.starts_with("http://") {
+        return Err("Only HTTP and HTTPS URLs are allowed".to_string());
+    }
+
+    // Parse and validate host
+    let parsed = url::Url::parse(&url).map_err(|e| format!("Invalid URL: {}", e))?;
+    let host = parsed.host_str().ok_or("URL has no host")?;
+
+    // Block private/internal hosts
+    let blocked_hosts = ["localhost", "127.0.0.1", "[::1]", "0.0.0.0"];
+    if blocked_hosts.iter().any(|h| host.eq_ignore_ascii_case(h)) {
+        return Err("Access to localhost is blocked".to_string());
+    }
+
+    // Block private IP ranges
+    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+        let is_private = match ip {
+            std::net::IpAddr::V4(v4) => {
+                v4.is_private() || v4.is_loopback() || v4.is_link_local()
+                    || v4.octets()[0] == 169 && v4.octets()[1] == 254 // link-local
+                    || v4.octets()[0] == 0 // 0.0.0.0/8
+            }
+            std::net::IpAddr::V6(v6) => v6.is_loopback(),
+        };
+        if is_private {
+            return Err("Access to private/internal IPs is blocked".to_string());
+        }
+    }
+
     let client = reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")
+        .redirect(reqwest::redirect::Policy::limited(5))
         .build()
         .map_err(|e| format!("HTTP client error: {}", e))?;
 
@@ -187,7 +154,6 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(mcp::create_mcp_state())
         .invoke_handler(tauri::generate_handler![
-            rebuild_app,
             extract_pdf_text,
             capture_oauth_callback,
             fetch_url,

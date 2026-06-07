@@ -41,6 +41,7 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-process",
  "tokio",
+ "url",
 ]
 
 [[package]]

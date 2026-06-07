@@ -124,6 +124,30 @@ function genId() {
   return `msg-${Date.now()}-${++idCounter}`;
 }
 
+/** Block SSRF: reject private/internal/localhost URLs */
+function isPrivateUrl(urlStr: string): boolean {
+  try {
+    const u = new URL(urlStr);
+    const host = u.hostname.toLowerCase();
+    if (host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host === "0.0.0.0") return true;
+    if (host.endsWith(".local") || host.endsWith(".internal")) return true;
+    // Check numeric IPs for private ranges
+    const parts = host.split(".").map(Number);
+    if (parts.length === 4 && parts.every((n) => !isNaN(n))) {
+      if (parts[0] === 10) return true;
+      if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+      if (parts[0] === 192 && parts[1] === 168) return true;
+      if (parts[0] === 169 && parts[1] === 254) return true;
+      if (parts[0] === 0) return true;
+    }
+    // Block non-HTTP schemes
+    if (u.protocol !== "https:" && u.protocol !== "http:") return true;
+    return false;
+  } catch {
+    return true; // Invalid URL = block it
+  }
+}
+
 let pipelineCounter = 0;
 
 function buildSystemMessages(pinnedDocs: PinnedDoc[], enabledToolNames?: string[], routerGuidance?: string, userMessage?: string): ChatMessage[] {
@@ -649,7 +673,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         if (results.length > 0) {
           const facts = results.map((r) => r.fact);
           const categories = results.map((r) => r.category);
-          console.log("[Aki:memory] Adding new memories:", facts);
+          console.log("[Aki:memory] Adding", facts.length, "new memories");
           useMemoryStore.getState().addAutoMemories(facts, categories);
         }
         // Trigger profile synthesis in background (non-blocking)
@@ -675,11 +699,21 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       async (toolCalls: ToolCall[]) => {
         // Handle tool calls
         const results: ToolResult[] = [];
+        // Security: validate tool calls against the set we offered
+        const allowedToolNames = new Set(toolNames);
+        const validatedCalls = toolCalls.filter((tc) => {
+          if (!allowedToolNames.has(tc.function.name)) {
+            console.warn(`[Aki:security] Blocked unauthorized tool call: ${tc.function.name}`);
+            results.push({ tool_call_id: tc.id, role: "tool", content: "Error: Tool not available" });
+            return false;
+          }
+          return true;
+        });
         // Cache drive file list within this call for read lookups
         let cachedDriveFiles: DriveFile[] | null = null;
         const onTokenRefresh = (t: typeof driveTokens) => useMemoryStore.getState().setDriveTokens(t);
 
-        for (const tc of toolCalls) {
+        for (const tc of validatedCalls) {
           if (tc.function.name === "save_memory") {
             try {
               const args = JSON.parse(tc.function.arguments);
@@ -811,7 +845,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
             try {
               const args = JSON.parse(tc.function.arguments);
               const { executeJavaScript } = await import("../lib/codeExecution");
-              const result = executeJavaScript(args.code);
+              const result = await executeJavaScript(args.code);
               let content = "";
               if (result.error) {
                 content = `Error: ${result.error}${result.output ? `\nOutput before error:\n${result.output}` : ""}`;
@@ -870,6 +904,13 @@ export const useChatStore = create<ChatState>()((set, get) => ({
           } else if (tc.function.name === "create_drive_file") {
             try {
               const args = JSON.parse(tc.function.arguments);
+              const approved = window.confirm(
+                `Aki wants to create a file on Google Drive:\n\nName: ${args.file_name}\n\nAllow?`
+              );
+              if (!approved) {
+                results.push({ tool_call_id: tc.id, role: "tool", content: "User declined to create the file." });
+                continue;
+              }
               const created = await createFile(
                 args.file_name,
                 args.content,
@@ -938,6 +979,14 @@ export const useChatStore = create<ChatState>()((set, get) => ({
           } else if (tc.function.name === "send_email") {
             try {
               const args = JSON.parse(tc.function.arguments);
+              // Security: require user confirmation before sending emails
+              const approved = window.confirm(
+                `Aki wants to send an email:\n\nTo: ${args.to}\nSubject: ${args.subject}\n\nAllow?`
+              );
+              if (!approved) {
+                results.push({ tool_call_id: tc.id, role: "tool", content: "User declined to send the email." });
+                continue;
+              }
               await sendEmail(args.to, args.subject, args.body, driveTokens!, driveClientId, driveClientSecret, onTokenRefresh);
               results.push({ tool_call_id: tc.id, role: "tool", content: `Email sent to ${args.to} with subject "${args.subject}"` });
             } catch (err) {
@@ -948,6 +997,11 @@ export const useChatStore = create<ChatState>()((set, get) => ({
             try {
               const args = JSON.parse(tc.function.arguments);
               const url = args.url;
+              // SSRF protection: block private/internal URLs
+              if (isPrivateUrl(url)) {
+                results.push({ tool_call_id: tc.id, role: "tool", content: "Error: Access to private/internal URLs is blocked" });
+                continue;
+              }
               // Use Jina Reader for clean content extraction
               const resp = await fetch(`https://r.jina.ai/${url}`, {
                 headers: { Accept: "text/markdown" },
