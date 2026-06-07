@@ -133,9 +133,16 @@ function CitationLink({ href, children, sources }: { href?: string; children?: R
   return <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
 }
 
-// Replace 【N】 patterns with markdown links (fullwidth brackets from search citations)
+// Replace citation patterns with markdown links
 function preprocessCitations(content: string): string {
-  return content.replace(/【(\d+)】/g, (_, num) => `[${num}](cite:${num})`);
+  let result = content;
+  // 【N】 fullwidth brackets
+  result = result.replace(/【(\d+)】/g, (_, num) => `[${num}](cite:${num})`);
+  // (source [N]) or (source[N])
+  result = result.replace(/\(source\s*\[(\d+)\]\)/gi, (_, num) => `[${num}](cite:${num})`);
+  // Standalone [N] not followed by ( (which would be a markdown link)
+  result = result.replace(/\[(\d+)\](?!\()/g, (_, num) => `[${num}](cite:${num})`);
+  return result;
 }
 
 export const MarkdownRenderer = memo(function MarkdownRenderer({ content, sources }: MarkdownRendererProps) {
