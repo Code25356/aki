@@ -102,8 +102,14 @@ export default function BrainView() {
         setUpdateStatus("done");
       }
     } catch (err: any) {
-      setUpdateError(err.message || "Failed to check for updates");
-      setUpdateStatus("error");
+      const msg = String(err.message || err || "");
+      // 404 or network errors when no release exists yet — treat as "up to date"
+      if (msg.includes("404") || msg.includes("Not Found") || msg.includes("network") || msg.includes("fetch")) {
+        setUpdateStatus("done");
+      } else {
+        setUpdateError(msg || "Failed to check for updates");
+        setUpdateStatus("error");
+      }
     }
   }
 
