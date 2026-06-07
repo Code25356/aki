@@ -29,4 +29,5 @@ tokio = { version = "1", features = ["net", "io-util", "time", "process"] }
 tauri-plugin-global-shortcut = "2"
 reqwest = { version = "0.12", features = ["rustls-tls"] }
 url = "2"
+tauri-plugin-updater = "2"
 

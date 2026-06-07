@@ -25,6 +25,14 @@
       "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://openrouter.ai https://api.tavily.com https://r.jina.ai https://accounts.google.com https://oauth2.googleapis.com https://www.googleapis.com https://gmail.googleapis.com https://api.groq.com https://*.google.com https://generativelanguage.googleapis.com; img-src 'self' data: https: blob:; font-src 'self' data:; worker-src 'self' blob:"
     }
   },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/Code25356/aki/releases/latest/download/latest.json"
+      ],
+      "pubkey": ""
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",

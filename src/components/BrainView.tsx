@@ -1,7 +1,10 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { check, type Update } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
+import { getVersion } from "@tauri-apps/api/app";
 import { useMemoryStore, type VoicePreset } from "../store/memoryStore";
 import { useModelStore, MODELS } from "../store/modelStore";
 import { analyzeVoice } from "../lib/voiceAnalysis";
@@ -23,6 +26,7 @@ import {
   Globe,
   HardDrive,
   Mic,
+  Download,
 } from "lucide-react";
 import { buildAuthUrl, exchangeCodeForTokens } from "../lib/googleDrive";
 
@@ -74,6 +78,60 @@ export default function BrainView() {
   const [driveError, setDriveError] = useState<string | null>(null);
   const [showVoiceCreator, setShowVoiceCreator] = useState(false);
   const [expandedVoice, setExpandedVoice] = useState<string | null>(null);
+
+  // Updater state
+  const [appVersion, setAppVersion] = useState("");
+  const [updateStatus, setUpdateStatus] = useState<"idle" | "checking" | "available" | "downloading" | "done" | "error">("idle");
+  const [updateInfo, setUpdateInfo] = useState<Update | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+
+  useEffect(() => {
+    getVersion().then(setAppVersion).catch(() => setAppVersion("unknown"));
+  }, []);
+
+  async function handleCheckUpdate() {
+    setUpdateStatus("checking");
+    setUpdateError(null);
+    try {
+      const update = await check();
+      if (update) {
+        setUpdateInfo(update);
+        setUpdateStatus("available");
+      } else {
+        setUpdateStatus("done");
+      }
+    } catch (err: any) {
+      setUpdateError(err.message || "Failed to check for updates");
+      setUpdateStatus("error");
+    }
+  }
+
+  async function handleDownloadUpdate() {
+    if (!updateInfo) return;
+    setUpdateStatus("downloading");
+    setDownloadProgress(0);
+    try {
+      let totalBytes = 0;
+      let downloadedBytes = 0;
+      await updateInfo.downloadAndInstall((event) => {
+        if (event.event === "Started" && event.data.contentLength) {
+          totalBytes = event.data.contentLength;
+        } else if (event.event === "Progress") {
+          downloadedBytes += event.data.chunkLength;
+          if (totalBytes > 0) {
+            setDownloadProgress(Math.round((downloadedBytes / totalBytes) * 100));
+          }
+        } else if (event.event === "Finished") {
+          setDownloadProgress(100);
+        }
+      });
+      await relaunch();
+    } catch (err: any) {
+      setUpdateError(err.message || "Update failed");
+      setUpdateStatus("error");
+    }
+  }
 
 
   async function handleDriveConnect() {
@@ -596,6 +654,88 @@ export default function BrainView() {
             </span>
             <ChevronRight size={14} className="text-[var(--color-text-secondary)]" />
           </button>
+        </div>
+
+        {/* App Updates */}
+        <div className="mb-8">
+          <label className="flex items-center gap-1.5 text-sm font-medium mb-2">
+            <Download size={14} className="text-[var(--color-accent)]" />
+            App Updates
+          </label>
+          <p className="text-xs text-[var(--color-text-secondary)] mb-3">
+            Current version: {appVersion || "…"}
+          </p>
+
+          {updateStatus === "idle" && (
+            <button
+              onClick={handleCheckUpdate}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium
+                         bg-[var(--color-hover)] border border-[var(--color-sidebar-border)]
+                         hover:border-[var(--color-accent)] transition-colors cursor-pointer"
+            >
+              Check for Updates
+            </button>
+          )}
+
+          {updateStatus === "checking" && (
+            <div className="flex items-center gap-2 text-sm text-[var(--color-text-secondary)]">
+              <Loader2 size={14} className="animate-spin" />
+              Checking for updates…
+            </div>
+          )}
+
+          {updateStatus === "done" && (
+            <div className="flex items-center gap-2 text-sm text-green-600">
+              <CheckCircle2 size={14} />
+              You're on the latest version.
+            </div>
+          )}
+
+          {updateStatus === "available" && updateInfo && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm text-[var(--color-accent)]">
+                <CheckCircle2 size={14} />
+                Version {updateInfo.version} available
+              </div>
+              <button
+                onClick={handleDownloadUpdate}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium
+                           bg-[var(--color-accent)] text-white
+                           hover:opacity-90 transition-opacity cursor-pointer"
+              >
+                <Download size={14} />
+                Download & Restart
+              </button>
+            </div>
+          )}
+
+          {updateStatus === "downloading" && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm text-[var(--color-text-secondary)]">
+                <Loader2 size={14} className="animate-spin" />
+                Downloading… {downloadProgress}%
+              </div>
+              <div className="h-1.5 rounded-full bg-[var(--color-hover)] overflow-hidden">
+                <div
+                  className="h-full bg-[var(--color-accent)] transition-all duration-300 rounded-full"
+                  style={{ width: `${downloadProgress}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {updateStatus === "error" && (
+            <div className="space-y-2">
+              <p className="text-sm text-red-500">{updateError}</p>
+              <button
+                onClick={handleCheckUpdate}
+                className="flex items-center gap-2 text-sm text-[var(--color-accent)] cursor-pointer hover:underline"
+              >
+                <RotateCcw size={12} />
+                Try again
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Auto Memory Panel (portal to body) */}
