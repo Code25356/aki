@@ -15,6 +15,7 @@ import { processPdf } from "./pdf";
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const DRIVE_API = "https://www.googleapis.com/drive/v3";
+const DOCS_API = "https://docs.googleapis.com/v1/documents";
 
 const SCOPES = "https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/gmail.modify";
 const REDIRECT_URI = "http://localhost:19847/oauth/callback";
@@ -344,6 +345,153 @@ export async function updateFile(
   }
 
   return await res.json();
+}
+
+/**
+ * Extract a Google Doc ID from various URL formats.
+ */
+export function extractGoogleDocId(url: string): string | null {
+  // https://docs.google.com/document/d/DOC_ID/edit...
+  const match = url.match(/docs\.google\.com\/document\/d\/([a-zA-Z0-9_-]+)/);
+  return match ? match[1] : null;
+}
+
+/**
+ * Read a Google Doc's full text content using the Docs API.
+ */
+export async function readGoogleDoc(
+  docId: string,
+  tokens: DriveTokens,
+  clientId: string,
+  clientSecret: string,
+  onTokenRefresh: (tokens: DriveTokens) => void,
+): Promise<{ title: string; content: string }> {
+  const accessToken = await getValidToken(tokens, clientId, clientSecret, onTokenRefresh);
+
+  const res = await fetch(`${DOCS_API}/${docId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Google Docs read failed (${res.status}): ${text}`);
+  }
+
+  const doc = await res.json();
+  const title = doc.title || "Untitled";
+
+  // Extract text from the document body
+  let content = "";
+  if (doc.body?.content) {
+    for (const element of doc.body.content) {
+      if (element.paragraph) {
+        for (const textRun of element.paragraph.elements || []) {
+          if (textRun.textRun?.content) {
+            content += textRun.textRun.content;
+          }
+        }
+      } else if (element.table) {
+        // Flatten table cells
+        for (const row of element.table.tableRows || []) {
+          const cells: string[] = [];
+          for (const cell of row.tableCells || []) {
+            let cellText = "";
+            for (const cellElement of cell.content || []) {
+              if (cellElement.paragraph) {
+                for (const textRun of cellElement.paragraph.elements || []) {
+                  if (textRun.textRun?.content) {
+                    cellText += textRun.textRun.content.trim();
+                  }
+                }
+              }
+            }
+            cells.push(cellText);
+          }
+          content += cells.join(" | ") + "\n";
+        }
+      }
+    }
+  }
+
+  return { title, content: content.trim() };
+}
+
+export interface DocEdit {
+  /** "replace" finds oldText and replaces with newText. "insert" inserts text at a position. "delete" removes text. */
+  type: "replace" | "insert" | "delete";
+  oldText?: string;
+  newText?: string;
+  index?: number;
+}
+
+/**
+ * Apply batch edits to a Google Doc using the Docs API batchUpdate.
+ */
+export async function editGoogleDoc(
+  docId: string,
+  edits: DocEdit[],
+  tokens: DriveTokens,
+  clientId: string,
+  clientSecret: string,
+  onTokenRefresh: (tokens: DriveTokens) => void,
+): Promise<string> {
+  const accessToken = await getValidToken(tokens, clientId, clientSecret, onTokenRefresh);
+
+  // Convert edits to Google Docs API requests
+  // Process in reverse order so indices don't shift
+  const requests: any[] = [];
+
+  for (const edit of edits) {
+    if (edit.type === "replace" && edit.oldText && edit.newText !== undefined) {
+      requests.push({
+        replaceAllText: {
+          containsText: {
+            text: edit.oldText,
+            matchCase: true,
+          },
+          replaceText: edit.newText,
+        },
+      });
+    } else if (edit.type === "insert" && edit.newText && edit.index !== undefined) {
+      requests.push({
+        insertText: {
+          location: { index: edit.index },
+          text: edit.newText,
+        },
+      });
+    } else if (edit.type === "delete" && edit.oldText) {
+      // Delete by replacing with empty string
+      requests.push({
+        replaceAllText: {
+          containsText: {
+            text: edit.oldText,
+            matchCase: true,
+          },
+          replaceText: "",
+        },
+      });
+    }
+  }
+
+  if (requests.length === 0) {
+    return "No valid edits to apply.";
+  }
+
+  const res = await fetch(`${DOCS_API}/${docId}:batchUpdate`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ requests }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Google Docs edit failed (${res.status}): ${text}`);
+  }
+
+  return `Successfully applied ${requests.length} edit(s) to the document.`;
 }
 
 /**

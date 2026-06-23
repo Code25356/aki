@@ -444,6 +444,66 @@ export const readWebpageTool: ToolDefinition = {
   },
 };
 
+export const readGoogleDocTool: ToolDefinition = {
+  type: "function",
+  function: {
+    name: "read_google_doc",
+    description:
+      "Read the full text content of a Google Doc by its URL or document ID. Use this when the user shares a Google Docs link (docs.google.com/document/d/...) and wants you to read, review, or analyze it.",
+    parameters: {
+      type: "object",
+      properties: {
+        url_or_id: {
+          type: "string",
+          description: "The Google Docs URL (e.g. https://docs.google.com/document/d/abc123/edit) or just the document ID",
+        },
+      },
+      required: ["url_or_id"],
+    },
+  },
+};
+
+export const editGoogleDocTool: ToolDefinition = {
+  type: "function",
+  function: {
+    name: "edit_google_doc",
+    description:
+      "Make edits to a Google Doc. Supports find-and-replace operations. Use after reading the doc to apply changes the user requests (fix typos, rewrite sections, add content, delete text). Each edit finds exact text and replaces it.",
+    parameters: {
+      type: "object",
+      properties: {
+        url_or_id: {
+          type: "string",
+          description: "The Google Docs URL or document ID",
+        },
+        edits: {
+          type: "array",
+          description: "Array of edits to apply. Each edit has type 'replace' (find oldText, replace with newText) or 'delete' (remove oldText).",
+          items: {
+            type: "object",
+            properties: {
+              type: {
+                type: "string",
+                description: "'replace' or 'delete'",
+              },
+              oldText: {
+                type: "string",
+                description: "The exact text to find in the document",
+              },
+              newText: {
+                type: "string",
+                description: "The replacement text (for 'replace' type). Omit for 'delete'.",
+              },
+            },
+            required: ["type", "oldText"],
+          },
+        },
+      },
+      required: ["url_or_id", "edits"],
+    },
+  },
+};
+
 export const executeCommandTool: ToolDefinition = {
   type: "function",
   function: {
@@ -511,7 +571,7 @@ export function getEnabledTools(
     macroContextTool,
   ];
   if (webSearchEnabled) tools.push(webSearchTool);
-  if (driveEnabled) tools.push(listDriveFilesTool, readDriveFileTool, createDriveFileTool, updateDriveFileTool);
+  if (driveEnabled) tools.push(listDriveFilesTool, readDriveFileTool, createDriveFileTool, updateDriveFileTool, readGoogleDocTool, editGoogleDocTool);
   if (gmailEnabled) tools.push(listEmailsTool, readEmailTool, sendEmailTool);
   return tools;
 }

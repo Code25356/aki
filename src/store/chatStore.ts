@@ -21,7 +21,7 @@ import {
 } from "../lib/db";
 import { getEnabledTools, type ToolCall, type ToolResult } from "../lib/tools";
 import { searchWeb, formatSearchResultsForLLM } from "../lib/webSearch";
-import { listFiles, readFile, createFile, updateFile, formatFileListForLLM, type DriveFile } from "../lib/googleDrive";
+import { listFiles, readFile, createFile, updateFile, formatFileListForLLM, extractGoogleDocId, readGoogleDoc, editGoogleDoc, type DriveFile, type DocEdit } from "../lib/googleDrive";
 import { listEmails, readEmail, sendEmail, formatEmailListForLLM } from "../lib/gmail";
 import { compactIfNeeded } from "../lib/contextCompaction";
 import { distillPreferences } from "../lib/feedbackDistill";
@@ -951,6 +951,34 @@ export const useChatStore = create<ChatState>()((set, get) => ({
               const msg = err instanceof Error ? err.message : "Drive update failed";
               results.push({ tool_call_id: tc.id, role: "tool", content: `Error: ${msg}` });
             }
+          } else if (tc.function.name === "read_google_doc") {
+            try {
+              const args = JSON.parse(tc.function.arguments);
+              const docId = extractGoogleDocId(args.url_or_id) || args.url_or_id;
+              const { title, content } = await readGoogleDoc(docId, driveTokens!, driveClientId, driveClientSecret, onTokenRefresh);
+              const truncated = content.length > 50000
+                ? content.slice(0, 50000) + `\n\n[Truncated — document is ${content.length} characters total]`
+                : content;
+              results.push({ tool_call_id: tc.id, role: "tool", content: `Google Doc: "${title}"\n\n${truncated}` });
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : "Google Doc read failed";
+              results.push({ tool_call_id: tc.id, role: "tool", content: `Error: ${msg}` });
+            }
+          } else if (tc.function.name === "edit_google_doc") {
+            try {
+              const args = JSON.parse(tc.function.arguments);
+              const docId = extractGoogleDocId(args.url_or_id) || args.url_or_id;
+              const edits: DocEdit[] = (args.edits || []).map((e: any) => ({
+                type: e.type || "replace",
+                oldText: e.oldText || e.old_text,
+                newText: e.newText ?? e.new_text ?? "",
+              }));
+              const result = await editGoogleDoc(docId, edits, driveTokens!, driveClientId, driveClientSecret, onTokenRefresh);
+              results.push({ tool_call_id: tc.id, role: "tool", content: result });
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : "Google Doc edit failed";
+              results.push({ tool_call_id: tc.id, role: "tool", content: `Error: ${msg}` });
+            }
           } else if (tc.function.name === "list_emails") {
             try {
               const args = JSON.parse(tc.function.arguments || "{}");
@@ -1010,16 +1038,26 @@ export const useChatStore = create<ChatState>()((set, get) => ({
                 results.push({ tool_call_id: tc.id, role: "tool", content: "Error: Access to private/internal URLs is blocked" });
                 continue;
               }
-              // Use Jina Reader for clean content extraction
-              const resp = await fetch(`https://r.jina.ai/${url}`, {
-                headers: { Accept: "text/markdown" },
-              });
-              if (!resp.ok) {
-                results.push({ tool_call_id: tc.id, role: "tool", content: `Error: Failed to read page (HTTP ${resp.status})` });
+              // Detect Google Docs URLs and use Docs API instead
+              const googleDocId = extractGoogleDocId(url);
+              if (googleDocId && driveTokens) {
+                const { title, content } = await readGoogleDoc(googleDocId, driveTokens, driveClientId, driveClientSecret, onTokenRefresh);
+                const truncated = content.length > 50000
+                  ? content.slice(0, 50000) + `\n\n[Truncated — document is ${content.length} characters total]`
+                  : content;
+                results.push({ tool_call_id: tc.id, role: "tool", content: `Google Doc: "${title}"\n\n${truncated}` });
               } else {
-                const raw = await resp.text();
-                const cleaned = cleanWebContent(raw);
-                results.push({ tool_call_id: tc.id, role: "tool", content: cleaned });
+                // Use Jina Reader for clean content extraction
+                const resp = await fetch(`https://r.jina.ai/${url}`, {
+                  headers: { Accept: "text/markdown" },
+                });
+                if (!resp.ok) {
+                  results.push({ tool_call_id: tc.id, role: "tool", content: `Error: Failed to read page (HTTP ${resp.status})` });
+                } else {
+                  const raw = await resp.text();
+                  const cleaned = cleanWebContent(raw);
+                  results.push({ tool_call_id: tc.id, role: "tool", content: cleaned });
+                }
               }
             } catch (err) {
               const msg = err instanceof Error ? err.message : "Webpage read failed";
