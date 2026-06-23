@@ -17,7 +17,7 @@ const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const DRIVE_API = "https://www.googleapis.com/drive/v3";
 const DOCS_API = "https://docs.googleapis.com/v1/documents";
 
-const SCOPES = "https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/gmail.modify";
+const SCOPES = "https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/gmail.modify";
 const REDIRECT_URI = "http://localhost:19847/oauth/callback";
 
 export interface DriveFile {
@@ -374,6 +374,13 @@ export async function readGoogleDoc(
 
   if (!res.ok) {
     const text = await res.text();
+    if (res.status === 401) {
+      throw new Error(`Authentication expired. Please reconnect your Google account in the Brain tab.`);
+    } else if (res.status === 403) {
+      throw new Error(`Permission denied. Make sure the document is shared with your Google account, or make it accessible via link.`);
+    } else if (res.status === 404) {
+      throw new Error(`Document not found. Check the URL or document ID.`);
+    }
     throw new Error(`Google Docs read failed (${res.status}): ${text}`);
   }
 

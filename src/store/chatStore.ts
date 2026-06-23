@@ -960,11 +960,17 @@ export const useChatStore = create<ChatState>()((set, get) => ({
             try {
               const args = JSON.parse(tc.function.arguments);
               const docId = extractGoogleDocId(args.url_or_id) || args.url_or_id;
-              const { title, content } = await readGoogleDoc(docId, driveTokens!, driveClientId, driveClientSecret, onTokenRefresh);
-              const truncated = content.length > 50000
-                ? content.slice(0, 50000) + `\n\n[Truncated — document is ${content.length} characters total]`
-                : content;
-              results.push({ tool_call_id: tc.id, role: "tool", content: `Google Doc: "${title}"\n\n${truncated}` });
+              // Always read fresh tokens from the store (they may have been refreshed)
+              const freshTokens = useMemoryStore.getState().driveTokens;
+              if (!freshTokens) {
+                results.push({ tool_call_id: tc.id, role: "tool", content: "Error: Google account not connected. Please connect your Google account in the Brain tab." });
+              } else {
+                const { title, content } = await readGoogleDoc(docId, freshTokens, driveClientId, driveClientSecret, onTokenRefresh);
+                const truncated = content.length > 50000
+                  ? content.slice(0, 50000) + `\n\n[Truncated — document is ${content.length} characters total]`
+                  : content;
+                results.push({ tool_call_id: tc.id, role: "tool", content: `Google Doc: "${title}"\n\n${truncated}` });
+              }
             } catch (err) {
               const msg = err instanceof Error ? err.message : "Google Doc read failed";
               results.push({ tool_call_id: tc.id, role: "tool", content: `Error: ${msg}` });
@@ -978,8 +984,13 @@ export const useChatStore = create<ChatState>()((set, get) => ({
                 oldText: e.oldText || e.old_text,
                 newText: e.newText ?? e.new_text ?? "",
               }));
-              const result = await editGoogleDoc(docId, edits, driveTokens!, driveClientId, driveClientSecret, onTokenRefresh);
-              results.push({ tool_call_id: tc.id, role: "tool", content: result });
+              const freshTokens = useMemoryStore.getState().driveTokens;
+              if (!freshTokens) {
+                results.push({ tool_call_id: tc.id, role: "tool", content: "Error: Google account not connected. Please connect your Google account in the Brain tab." });
+              } else {
+                const result = await editGoogleDoc(docId, edits, freshTokens, driveClientId, driveClientSecret, onTokenRefresh);
+                results.push({ tool_call_id: tc.id, role: "tool", content: result });
+              }
             } catch (err) {
               const msg = err instanceof Error ? err.message : "Google Doc edit failed";
               results.push({ tool_call_id: tc.id, role: "tool", content: `Error: ${msg}` });
