@@ -554,6 +554,7 @@ export function getEnabledTools(
   webSearchEnabled: boolean,
   driveEnabled: boolean,
   gmailEnabled: boolean,
+  googleAuthReady: boolean = false,
 ): ToolDefinition[] {
   const tools: ToolDefinition[] = [
     saveMemoryTool,
@@ -571,7 +572,9 @@ export function getEnabledTools(
     macroContextTool,
   ];
   if (webSearchEnabled) tools.push(webSearchTool);
-  if (driveEnabled) tools.push(listDriveFilesTool, readDriveFileTool, createDriveFileTool, updateDriveFileTool, readGoogleDocTool, editGoogleDocTool);
+  if (driveEnabled) tools.push(listDriveFilesTool, readDriveFileTool, createDriveFileTool, updateDriveFileTool);
+  // Google Docs tools only need OAuth tokens, not a specific folder
+  if (googleAuthReady) tools.push(readGoogleDocTool, editGoogleDocTool);
   if (gmailEnabled) tools.push(listEmailsTool, readEmailTool, sendEmailTool);
   return tools;
 }

@@ -158,7 +158,11 @@ function buildSystemMessages(pinnedDocs: PinnedDoc[], enabledToolNames?: string[
 
   // Explicitly tell the model what tools it has — models forget/deny without this
   if (enabledToolNames && enabledToolNames.length > 0) {
-    let toolSection = `YOUR AVAILABLE TOOLS: You have the following tools available and MUST use them when relevant. Do NOT say you lack a capability if it's listed here. If the user asks you to do something a tool can handle, USE the tool.\n\nTools: ${enabledToolNames.join(", ")}`;
+    let toolSection = `YOUR AVAILABLE TOOLS: You have the following tools available and MUST use them when relevant. Do NOT say you lack a capability if it's listed here. Do NOT say "I cannot access" anything — you HAVE access via tools. If the user asks you to do something a tool can handle, USE the tool immediately.\n\nTools: ${enabledToolNames.join(", ")}`;
+    // Add URL routing hints
+    if (enabledToolNames.includes("read_google_doc")) {
+      toolSection += `\n\nIMPORTANT: When the user shares a Google Docs URL (docs.google.com/document/d/...), you MUST use read_google_doc to read it. You have full access to read and edit Google Docs. Never say you cannot access Google Drive or external links.`;
+    }
     if (routerGuidance) {
       toolSection += `\n\n${routerGuidance}`;
     }
@@ -612,8 +616,9 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     const { tavilyApiKey, webSearchEnabled, driveEnabled, driveTokens, driveClientId, driveClientSecret, gmailEnabled } = useMemoryStore.getState();
     const activeDriveFolderId = get().threadDriveFolderId;
     const driveReady = driveEnabled && !!driveTokens && !!activeDriveFolderId;
+    const googleAuthReady = driveEnabled && !!driveTokens;
     const gmailReady = gmailEnabled && !!driveTokens;
-    const tools = getEnabledTools(!!tavilyApiKey, driveReady, gmailReady);
+    const tools = getEnabledTools(!!tavilyApiKey, driveReady, gmailReady, googleAuthReady);
     const toolNames = tools.map((t) => t.function.name);
 
     const systemMessages = buildSystemMessages(get().pinnedDocs, toolNames, undefined, content);
