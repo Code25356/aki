@@ -444,6 +444,33 @@ export const readWebpageTool: ToolDefinition = {
   },
 };
 
+export const executeCommandTool: ToolDefinition = {
+  type: "function",
+  function: {
+    name: "execute_command",
+    description:
+      "Execute a shell command on the user's computer. Returns stdout, stderr, and exit code. Use for file operations, running scripts, installing packages, git commands, system tasks, and any terminal operation. Commands run via /bin/sh with full shell features (pipes, redirects, env vars).",
+    parameters: {
+      type: "object",
+      properties: {
+        command: {
+          type: "string",
+          description: "The shell command to execute (e.g. 'ls -la', 'mkdir project && cd project && npm init -y')",
+        },
+        working_directory: {
+          type: "string",
+          description: "Optional working directory to run the command in. Defaults to user's home directory.",
+        },
+        timeout_ms: {
+          type: "number",
+          description: "Optional timeout in milliseconds (default 30000, max 120000)",
+        },
+      },
+      required: ["command"],
+    },
+  },
+};
+
 export const runCodeTool: ToolDefinition = {
   type: "function",
   function: {
@@ -468,6 +495,7 @@ export function getEnabledTools(
   driveEnabled: boolean,
   gmailEnabled: boolean,
   mcpTools: ToolDefinition[] = [],
+  agentModeEnabled: boolean = false,
 ): ToolDefinition[] {
   const tools: ToolDefinition[] = [
     saveMemoryTool,
@@ -484,6 +512,7 @@ export function getEnabledTools(
     optionsFlowTool,
     macroContextTool,
   ];
+  if (agentModeEnabled) tools.push(executeCommandTool);
   if (webSearchEnabled) tools.push(webSearchTool);
   if (driveEnabled) tools.push(listDriveFilesTool, readDriveFileTool, createDriveFileTool, updateDriveFileTool);
   if (gmailEnabled) tools.push(listEmailsTool, readEmailTool, sendEmailTool);

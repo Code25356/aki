@@ -17,6 +17,10 @@ export function buildGuidance(intents: ToolIntent[]): string {
     parts.push(`FINANCE: Chain tools (quote → TA → fundamentals). After data, ALWAYS give: bull case, bear case, clear recommendation with reasoning. If ANY tool errors or returns zeros/N/A, IMMEDIATELY use web_search + read_webpage to fill the gap — never leave data missing. For comparisons, end with ranking + allocation suggestion. For earnings/news context, web_search + read 2-3 articles.`);
   }
 
+  if (intents.includes("agent")) {
+    parts.push(`AGENT: You MUST use browser tools for tasks involving live websites. Pattern: browser_navigate → browser_snapshot → analyze → browser_click/browser_type → browser_snapshot → repeat. Do NOT use web_search as a shortcut when the task requires real browser interaction with specific sites.`);
+  }
+
   if (intents.includes("browse")) {
     parts.push(`BROWSE: read_webpage for content (faster). Playwright for interaction (click/fill/submit). For scraping: navigate → snapshot → extract with run_code.`);
   }

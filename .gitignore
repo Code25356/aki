@@ -26,3 +26,4 @@ src-tauri/target
 
 # Build artifacts
 windows-build/
+.vercel

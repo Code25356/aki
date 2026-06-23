@@ -12,6 +12,7 @@ export type ToolIntent =
   | "memory"
   | "code"
   | "create"
+  | "agent"
   | "general";
 
 /**
@@ -38,6 +39,7 @@ export const TOOL_CATEGORIES: Record<string, ToolIntent[]> = {
   // Utilities
   run_code: ["code", "finance", "general"],
   save_memory: ["memory", "general"],
+  execute_command: ["agent", "code", "files"],
 
   // Drive
   list_drive_files: ["files"],

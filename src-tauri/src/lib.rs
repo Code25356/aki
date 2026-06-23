@@ -1,7 +1,73 @@
 use base64::Engine;
+use serde::Serialize;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 mod mcp;
+
+#[derive(Serialize)]
+pub struct ShellResult {
+    stdout: String,
+    stderr: String,
+    exit_code: Option<i32>,
+}
+
+/// Execute a shell command and return stdout, stderr, and exit code.
+/// Runs via /bin/sh -c on macOS/Linux for full shell features (pipes, env vars, etc.).
+#[tauri::command]
+async fn execute_shell(
+    command: String,
+    working_directory: Option<String>,
+    timeout_ms: Option<u64>,
+) -> Result<ShellResult, String> {
+    let timeout = std::time::Duration::from_millis(timeout_ms.unwrap_or(30_000));
+
+    let mut cmd = tokio::process::Command::new("/bin/sh");
+    cmd.arg("-c").arg(&command);
+
+    if let Some(ref dir) = working_directory {
+        cmd.current_dir(dir);
+    }
+
+    // Inherit a reasonable PATH for GUI apps on macOS
+    let home = std::env::var("HOME").unwrap_or_default();
+
+    // Resolve nvm node path dynamically
+    let nvm_dir = format!("{}/.nvm/versions/node", home);
+    let nvm_bin = if let Ok(entries) = std::fs::read_dir(&nvm_dir) {
+        let mut versions: Vec<String> = entries
+            .filter_map(|e| e.ok())
+            .filter_map(|e| e.file_name().into_string().ok())
+            .collect();
+        versions.sort();
+        versions.last().map(|v| format!("{}/{}/bin", nvm_dir, v)).unwrap_or_default()
+    } else {
+        String::new()
+    };
+
+    let path = format!(
+        "{}:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:{}/.cargo/bin",
+        nvm_bin, home
+    );
+    cmd.env("PATH", &path);
+    cmd.env("HOME", &home);
+
+    cmd.stdout(std::process::Stdio::piped());
+    cmd.stderr(std::process::Stdio::piped());
+
+    let child = cmd.spawn().map_err(|e| format!("Failed to spawn: {}", e))?;
+
+    let result = tokio::time::timeout(timeout, child.wait_with_output()).await;
+
+    match result {
+        Ok(Ok(output)) => Ok(ShellResult {
+            stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+            exit_code: output.status.code(),
+        }),
+        Ok(Err(e)) => Err(format!("Process error: {}", e)),
+        Err(_) => Err(format!("Command timed out after {}ms", timeout.as_millis())),
+    }
+}
 
 #[tauri::command]
 fn extract_pdf_text(base64_data: String) -> Result<String, String> {
@@ -156,6 +222,7 @@ pub fn run() {
             extract_pdf_text,
             capture_oauth_callback,
             fetch_url,
+            execute_shell,
             mcp::mcp_spawn,
             mcp::mcp_send,
             mcp::mcp_stop,

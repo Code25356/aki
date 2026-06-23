@@ -8,8 +8,18 @@ const BOILERPLATE_STARTS = /^(cookie|accept all|privacy policy|terms of (service
 const SHORT_LINE_THRESHOLD = 30;
 const SHORT_LINE_RUN = 5;
 
-export function cleanWebContent(raw: string, maxChars = 12000): string {
+export function cleanWebContent(raw: string, maxChars = 16000): string {
   if (!raw || raw.length < 100) return raw;
+
+  // Don't clean accessibility tree output (Playwright snapshots with refs)
+  // These look like "- link "text" [ref=N]" and are critical for agent interaction
+  if (raw.includes("[ref=") || raw.startsWith("- ")) {
+    // Just truncate if too long, don't strip content
+    if (raw.length > maxChars) {
+      return raw.slice(0, maxChars) + "\n\n[Page state truncated]";
+    }
+    return raw;
+  }
 
   const lines = raw.split("\n");
   const cleaned: string[] = [];

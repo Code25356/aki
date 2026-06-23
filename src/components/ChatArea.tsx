@@ -24,6 +24,7 @@ import {
   Microscope,
   ThumbsUp,
   ThumbsDown,
+  Terminal,
 } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { MarkdownRenderer } from "./MarkdownRenderer";
@@ -808,7 +809,7 @@ export default function ChatArea() {
   const [deepResearch, setDeepResearch] = useState(false);
   const recognitionRef = useRef<any>(null);
   const { templates } = useTemplateStore();
-  const { messages, activeStreams, error, sendMessage, stopStreaming } =
+  const { messages, activeStreams, error, sendMessage, stopStreaming, agentMode, setAgentMode } =
     useChatStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -1158,6 +1159,14 @@ Research question: ${trimmed}`;
           )}
 
           <PinnedDocsChips />
+          {agentMode && (
+            <div className="flex items-center gap-1.5 px-4 pt-2 pb-0">
+              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-medium">
+                <Terminal size={12} />
+                Agent Mode — AI can run commands, edit files, and browse the web
+              </div>
+            </div>
+          )}
           <div className="flex items-end gap-1.5 px-4 py-3.5">
             {/* Attachment button */}
             <button
@@ -1307,6 +1316,18 @@ Research question: ${trimmed}`;
                          placeholder:text-[var(--color-text-secondary)] placeholder:opacity-60
                          max-h-32 leading-relaxed"
             />
+            {/* Agent mode toggle */}
+            <button
+              onClick={() => setAgentMode(!agentMode)}
+              className={`p-1.5 rounded-lg transition-colors cursor-pointer shrink-0 mb-0.5 ${
+                agentMode
+                  ? "text-emerald-500 bg-emerald-500/10"
+                  : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-hover)]"
+              }`}
+              title={agentMode ? "Agent mode ON — AI can run commands" : "Enable Agent mode (computer use)"}
+            >
+              <Terminal size={16} />
+            </button>
             {/* Canvas mode toggle */}
             <button
               onClick={() => setCanvasMode(true)}

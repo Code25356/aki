@@ -10,7 +10,7 @@ import {
 import { shouldUseRag, retrieveRelevantChunks } from "../lib/rag";
 import { maybeSynthesizeProfile } from "../lib/profileSynthesis";
 import { useMemoryStore, selectRelevantMemories } from "./memoryStore";
-import { useModelStore } from "./modelStore";
+import { useModelStore, MODELS } from "./modelStore";
 import {
   type ChatThread,
   type PinnedDoc,
@@ -103,6 +103,7 @@ interface ChatState {
   threads: ChatThread[];
   threadDriveFolderId: string | null; // per-conversation Drive folder
   pinnedDocs: PinnedDoc[];
+  agentMode: boolean;
 
   sendMessage: (content: string, attachments?: Attachment[]) => void;
   stopStreaming: () => void;
@@ -117,6 +118,7 @@ interface ChatState {
   unpinDoc: (docId: string) => Promise<void>;
   setActiveResponse: (messageId: string, idx: number) => void;
   setResponseFeedback: (messageId: string, idx: number, feedback: "up" | "down" | undefined) => void;
+  setAgentMode: (enabled: boolean) => void;
 }
 
 let idCounter = 0;
@@ -419,7 +421,9 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   threads: [],
   threadDriveFolderId: null,
   pinnedDocs: [],
+  agentMode: false,
 
+  setAgentMode: (enabled: boolean) => set({ agentMode: enabled }),
   setThreadDriveFolderId: (folderId: string | null) => set({ threadDriveFolderId: folderId }),
 
   togglePin: (messageId: string) => {
@@ -541,11 +545,20 @@ export const useChatStore = create<ChatState>()((set, get) => ({
 
   sendMessage: async (content: string, attachments?: Attachment[]) => {
     const { apiKey } = useMemoryStore.getState();
-    const { primaryModel, panelModels } = useModelStore.getState();
+    let { primaryModel, panelModels } = useModelStore.getState();
 
     if (!apiKey) {
       set({ error: "Please add your OpenRouter API key in the Brain tab." });
       return;
+    }
+
+    // Auto-route to a vision model if images are attached and current model lacks vision
+    const hasImages = attachments?.some((a) => a.type === "image");
+    if (hasImages && !primaryModel.vision) {
+      const visionModel = MODELS.find((m) => m.vision);
+      if (visionModel) {
+        primaryModel = visionModel;
+      }
     }
 
     const threadId = get().currentThreadId || genId();
@@ -603,9 +616,66 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     const driveReady = driveEnabled && !!driveTokens && !!activeDriveFolderId;
     const gmailReady = gmailEnabled && !!driveTokens;
     const { mcpTools } = useMcpStore.getState();
-    const allTools = getEnabledTools(!!tavilyApiKey, driveReady, gmailReady, mcpTools);
-    const intents = classifyIntent(content);
-    const { tools, guidance: routerGuidance } = selectTools(allTools, intents);
+    const agentMode = get().agentMode;
+    const allTools = getEnabledTools(!!tavilyApiKey, driveReady, gmailReady, mcpTools, agentMode);
+    const intents = agentMode ? ["agent" as const, ...classifyIntent(content)] : classifyIntent(content);
+    const agentGuidance = `AGENT MODE — AUTONOMOUS COMPUTER USE
+
+You are an autonomous agent that ACTS on the computer to accomplish goals. You do NOT just provide information — you take real actions on real websites.
+
+## ABSOLUTE RULES (NEVER VIOLATE)
+1. When the task involves a website (booking, shopping, forms, checking prices/availability), you MUST use Playwright browser tools to navigate and interact with the actual site. DO NOT use web_search as a shortcut. web_search gives stale, generic info — browser gives LIVE, real-time data.
+2. NEVER stop after one action. You have 30 tool call rounds. A typical task takes 8-20 actions. Keep going until the goal is FULLY achieved.
+3. PLAN before you act. State your step-by-step plan, then execute each step.
+4. After each browser action, the system automatically shows you the current page state. Read it carefully to decide your next action.
+5. If a page element isn't visible, SCROLL to find it. If an action fails, try a different approach.
+
+## BROWSER TOOLS (Playwright MCP)
+- browser_navigate(url) — Go to a URL. Page state is automatically captured.
+- browser_click(element) — Click a link/button/tab. Target elements by their ref number from the page state.
+- browser_type(element, text) — Type text into an input field.
+- browser_press_key(key) — Press Enter, Tab, Escape, etc.
+- browser_scroll(direction) — Scroll "down" or "up" to reveal more content.
+- browser_select_option(element, values) — Select from dropdown menus.
+- browser_snapshot() — Manually request current page state (usually automatic).
+
+## HOW TO READ PAGE STATE
+After each action, you'll see "--- Current Page State ---" showing the accessibility tree:
+- Elements with [ref=N] can be targeted in browser_click/browser_type using that ref
+- Look for input fields, buttons, links, headings to understand the page
+- If you don't see what you need, scroll down
+
+## WORKFLOW
+1. State your plan: "I'll go to booking.com, search for [destination] on [dates], compare results"
+2. browser_navigate to the starting URL
+3. Read the page state → identify the element to interact with
+4. browser_click or browser_type on that element (use the ref number)
+5. Read the new page state → decide next action
+6. Repeat 3-5 until subtask is done
+7. Synthesize findings and present results OR continue to next site
+
+## WHEN TO USE WHAT
+| Task | Tool |
+|------|------|
+| Book hotels, compare prices, fill forms | Playwright browser tools |
+| Find which URL to start with | web_search (ONE call max, then switch to browser) |
+| Run scripts, file operations | execute_command |
+| Read a static article | read_webpage |
+
+## EXAMPLES OF WHAT YOU SHOULD DO
+- "Find hotel deals in San Diego" → Navigate to booking.com/kayak.com → fill search → read results → compare
+- "Fill out this form" → Navigate to URL → snapshot form → fill each field → submit
+- "Buy the cheapest flight" → Navigate to google flights → enter route/dates → read results → present options
+- "Check my order status" → Navigate to the site → find order tracking → enter details → read status
+
+## NEVER DO THIS
+- ❌ Use web_search to "find hotel prices" instead of actually visiting booking sites
+- ❌ Stop after navigating to a page without interacting with it
+- ❌ Say "I can't interact with websites" — you CAN and MUST
+- ❌ Give generic advice when you could take action and get real data`;
+    const { tools, guidance: routerGuidance } = agentMode
+      ? { tools: allTools, guidance: agentGuidance }
+      : selectTools(allTools, intents);
     const toolNames = tools.map((t) => t.function.name);
 
     const systemMessages = buildSystemMessages(get().pinnedDocs, toolNames, routerGuidance, content);
@@ -1017,6 +1087,25 @@ export const useChatStore = create<ChatState>()((set, get) => ({
               const msg = err instanceof Error ? err.message : "Webpage read failed";
               results.push({ tool_call_id: tc.id, role: "tool", content: `Error: ${msg}` });
             }
+          } else if (tc.function.name === "execute_command") {
+            try {
+              const args = JSON.parse(tc.function.arguments);
+              const { invoke } = await import("@tauri-apps/api/core");
+              const result = await invoke<{ stdout: string; stderr: string; exit_code: number | null }>("execute_shell", {
+                command: args.command,
+                workingDirectory: args.working_directory || null,
+                timeoutMs: Math.min(args.timeout_ms || 30000, 120000),
+              });
+              const output = [
+                result.stdout ? `stdout:\n${result.stdout}` : "",
+                result.stderr ? `stderr:\n${result.stderr}` : "",
+                `exit_code: ${result.exit_code ?? "unknown"}`,
+              ].filter(Boolean).join("\n\n");
+              results.push({ tool_call_id: tc.id, role: "tool", content: output });
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : "Command execution failed";
+              results.push({ tool_call_id: tc.id, role: "tool", content: `Error: ${msg}` });
+            }
           } else if (tc.function.name.startsWith("mcp_")) {
             // Route to MCP server
             try {
@@ -1027,6 +1116,23 @@ export const useChatStore = create<ChatState>()((set, get) => ({
                 result = cleanWebContent(result);
               }
               results.push({ tool_call_id: tc.id, role: "tool", content: result });
+
+              // AUTO-SNAPSHOT: After any Playwright action that mutates page state,
+              // automatically capture and append the current page state so the model
+              // always has context for its next decision (observe-act-observe loop)
+              if (agentMode && tc.function.name.startsWith("mcp_playwright_") &&
+                  tc.function.name !== "mcp_playwright_browser_snapshot" &&
+                  !tc.function.name.includes("close")) {
+                try {
+                  let snapshot = await useMcpStore.getState().callTool("mcp_playwright_browser_snapshot", {});
+                  snapshot = cleanWebContent(snapshot);
+                  if (snapshot && snapshot.length > 20) {
+                    results[results.length - 1].content += `\n\n--- Current Page State ---\n${snapshot}`;
+                  }
+                } catch {
+                  // Snapshot failed (page still loading), skip silently
+                }
+              }
             } catch (err) {
               const msg = err instanceof Error ? err.message : "MCP tool call failed";
               results.push({ tool_call_id: tc.id, role: "tool", content: `Error: ${msg}` });
@@ -1186,6 +1292,8 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         set({ activeStreams: 0 });
       },
       controller.signal,
+      0,
+      agentMode ? 30 : 5,
     );
   },
 

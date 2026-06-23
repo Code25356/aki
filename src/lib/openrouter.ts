@@ -305,8 +305,9 @@ export async function streamChatWithTools(
   onError: (error: string) => void,
   signal?: AbortSignal,
   _depth: number = 0,
+  maxRounds: number = 5,
 ) {
-  const MAX_TOOL_ROUNDS = 5;
+  const MAX_TOOL_ROUNDS = maxRounds;
   try {
     const body: Record<string, unknown> = { model, messages, stream: true };
     if (tools.length > 0) {
@@ -396,7 +397,7 @@ export async function streamChatWithTools(
             if (_depth + 1 >= MAX_TOOL_ROUNDS) {
               await streamChat(apiKey, model, followUp, onChunk, onDone, onError, signal);
             } else {
-              await streamChatWithTools(apiKey, model, followUp, tools, onChunk, onToolCall, onDone, onError, signal, _depth + 1);
+              await streamChatWithTools(apiKey, model, followUp, tools, onChunk, onToolCall, onDone, onError, signal, _depth + 1, maxRounds);
             }
             return;
           }
@@ -467,7 +468,7 @@ export async function streamChatWithTools(
       if (_depth + 1 >= MAX_TOOL_ROUNDS) {
         await streamChat(apiKey, model, followUp, onChunk, onDone, onError, signal);
       } else {
-        await streamChatWithTools(apiKey, model, followUp, tools, onChunk, onToolCall, onDone, onError, signal, _depth + 1);
+        await streamChatWithTools(apiKey, model, followUp, tools, onChunk, onToolCall, onDone, onError, signal, _depth + 1, maxRounds);
       }
       return;
     }

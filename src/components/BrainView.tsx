@@ -27,6 +27,7 @@ import {
   HardDrive,
   Mic,
   Download,
+  Hammer,
 } from "lucide-react";
 import { buildAuthUrl, exchangeCodeForTokens } from "../lib/googleDrive";
 
@@ -86,6 +87,10 @@ export default function BrainView() {
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState(0);
 
+  // Build from source state
+  const [buildStatus, setBuildStatus] = useState<"idle" | "building" | "done" | "error">("idle");
+  const [buildError, setBuildError] = useState<string | null>(null);
+
   useEffect(() => {
     getVersion().then(setAppVersion).catch(() => setAppVersion("unknown"));
   }, []);
@@ -139,6 +144,27 @@ export default function BrainView() {
     }
   }
 
+
+  async function handleBuildFromSource() {
+    setBuildStatus("building");
+    setBuildError(null);
+    try {
+      const result = await invoke<{ stdout: string; stderr: string; exit_code: number | null }>("execute_shell", {
+        command: "npm run tauri build && rm -rf /Applications/Aki.app && cp -R src-tauri/target/release/bundle/macos/Aki.app /Applications/",
+        workingDirectory: "/Users/avajpayee/AI/aichat",
+        timeoutMs: 300000, // 5 min timeout for build
+      });
+      if (result.exit_code === 0) {
+        setBuildStatus("done");
+      } else {
+        setBuildError(result.stderr || "Build failed");
+        setBuildStatus("error");
+      }
+    } catch (err: any) {
+      setBuildError(err.message || "Build failed");
+      setBuildStatus("error");
+    }
+  }
 
   async function handleDriveConnect() {
     if (!driveClientId || !driveClientSecret) {
@@ -742,6 +768,62 @@ export default function BrainView() {
               </button>
             </div>
           )}
+
+          {/* Build from Source */}
+          <div className="mt-4 pt-4 border-t border-[var(--color-sidebar-border)]">
+            <p className="text-xs text-[var(--color-text-secondary)] mb-2">
+              Build & install from local source code
+            </p>
+
+            {buildStatus === "idle" && (
+              <button
+                onClick={handleBuildFromSource}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium
+                           bg-[var(--color-hover)] border border-[var(--color-sidebar-border)]
+                           hover:border-emerald-500 transition-colors cursor-pointer"
+              >
+                <Hammer size={14} />
+                Build & Install from Source
+              </button>
+            )}
+
+            {buildStatus === "building" && (
+              <div className="flex items-center gap-2 text-sm text-[var(--color-text-secondary)]">
+                <Loader2 size={14} className="animate-spin" />
+                Building… this may take a minute
+              </div>
+            )}
+
+            {buildStatus === "done" && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm text-green-600">
+                  <CheckCircle2 size={14} />
+                  Build complete! Installed to /Applications.
+                </div>
+                <button
+                  onClick={() => relaunch()}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium
+                             bg-emerald-600 text-white hover:opacity-90 transition-opacity cursor-pointer"
+                >
+                  <RotateCcw size={14} />
+                  Relaunch App
+                </button>
+              </div>
+            )}
+
+            {buildStatus === "error" && (
+              <div className="space-y-2">
+                <p className="text-sm text-red-500">{buildError}</p>
+                <button
+                  onClick={() => { setBuildStatus("idle"); setBuildError(null); }}
+                  className="flex items-center gap-2 text-sm text-[var(--color-accent)] cursor-pointer hover:underline"
+                >
+                  <RotateCcw size={12} />
+                  Try again
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Auto Memory Panel (portal to body) */}

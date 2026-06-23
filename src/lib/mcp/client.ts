@@ -130,6 +130,31 @@ export class McpClient {
     return texts.join("\n") || "[No content returned]";
   }
 
+  /** Call a tool and preserve both text and image results (for vision-capable models) */
+  async callToolWithImages(
+    toolName: string,
+    args: Record<string, unknown>,
+  ): Promise<{ text: string; images: Array<{ data: string; mimeType: string }> }> {
+    const result = await this.send<McpToolCallResult>("tools/call", {
+      name: toolName,
+      arguments: args,
+    });
+
+    const texts = result.content
+      .filter((c): c is { type: "text"; text: string } => c.type === "text")
+      .map((c) => c.text);
+
+    const images = result.content
+      .filter((c): c is { type: "image"; data: string; mimeType: string } => c.type === "image")
+      .map((c) => ({ data: c.data, mimeType: c.mimeType }));
+
+    const text = result.isError
+      ? `Error: ${texts.join("\n") || "Unknown MCP error"}`
+      : texts.join("\n") || "[No content returned]";
+
+    return { text, images };
+  }
+
   private async send<T>(method: string, params?: Record<string, unknown>): Promise<T> {
     const request = createRequest(method, params);
     const responseStr = await invoke<string>("mcp_send", {
