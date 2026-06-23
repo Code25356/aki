@@ -494,8 +494,6 @@ export function getEnabledTools(
   webSearchEnabled: boolean,
   driveEnabled: boolean,
   gmailEnabled: boolean,
-  mcpTools: ToolDefinition[] = [],
-  agentModeEnabled: boolean = false,
 ): ToolDefinition[] {
   const tools: ToolDefinition[] = [
     saveMemoryTool,
@@ -512,11 +510,8 @@ export function getEnabledTools(
     optionsFlowTool,
     macroContextTool,
   ];
-  if (agentModeEnabled) tools.push(executeCommandTool);
   if (webSearchEnabled) tools.push(webSearchTool);
   if (driveEnabled) tools.push(listDriveFilesTool, readDriveFileTool, createDriveFileTool, updateDriveFileTool);
   if (gmailEnabled) tools.push(listEmailsTool, readEmailTool, sendEmailTool);
-  // Append MCP server tools
-  if (mcpTools.length > 0) tools.push(...mcpTools);
   return tools;
 }

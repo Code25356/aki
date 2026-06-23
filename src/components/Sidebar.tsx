@@ -11,7 +11,6 @@ import {
   Search,
   X,
   Mic,
-  Plug,
   Headphones,
 } from "lucide-react";
 import { useChatStore } from "../store/chatStore";
@@ -172,18 +171,6 @@ export default function Sidebar({ collapsed, onToggle, activeView, onViewChange,
         >
           <Mic size={13} />
           Meet
-        </button>
-        <button
-          onClick={() => onViewChange("tools")}
-          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12.5px] font-medium
-                     transition-all duration-150 cursor-pointer shrink-0
-                     ${activeView === "tools"
-                       ? "bg-[var(--color-hover)] text-[var(--color-text-primary)]"
-                       : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
-                     }`}
-        >
-          <Plug size={13} />
-          Tools
         </button>
         <button
           onClick={() => onViewChange("talk")}
@@ -372,8 +359,6 @@ export default function Sidebar({ collapsed, onToggle, activeView, onViewChange,
               ? "Edit your memory and instructions in the main panel."
               : activeView === "talk"
               ? "Hands-free voice conversation with your AI."
-              : activeView === "tools"
-              ? "Manage MCP server connections."
               : activeView === "meeting"
               ? "Record meetings and generate AI notes."
               : "User guide and feature documentation."}

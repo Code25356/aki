@@ -25,9 +25,7 @@ import { listFiles, readFile, createFile, updateFile, formatFileListForLLM, type
 import { listEmails, readEmail, sendEmail, formatEmailListForLLM } from "../lib/gmail";
 import { compactIfNeeded } from "../lib/contextCompaction";
 import { distillPreferences } from "../lib/feedbackDistill";
-import { useMcpStore } from "./mcpStore";
-import { cleanWebContent, isWebContentTool } from "../lib/mcp/contentCleaner";
-import { classifyIntent, selectTools } from "../lib/mcp/router";
+import { cleanWebContent } from "../lib/contentCleaner";
 import {
   handleGetQuote,
   handleTechnicalAnalysis,
@@ -615,70 +613,10 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     const activeDriveFolderId = get().threadDriveFolderId;
     const driveReady = driveEnabled && !!driveTokens && !!activeDriveFolderId;
     const gmailReady = gmailEnabled && !!driveTokens;
-    const { mcpTools } = useMcpStore.getState();
-    const agentMode = get().agentMode;
-    const allTools = getEnabledTools(!!tavilyApiKey, driveReady, gmailReady, mcpTools, agentMode);
-    const intents = agentMode ? ["agent" as const, ...classifyIntent(content)] : classifyIntent(content);
-    const agentGuidance = `AGENT MODE — AUTONOMOUS COMPUTER USE
-
-You are an autonomous agent that ACTS on the computer to accomplish goals. You do NOT just provide information — you take real actions on real websites.
-
-## ABSOLUTE RULES (NEVER VIOLATE)
-1. When the task involves a website (booking, shopping, forms, checking prices/availability), you MUST use Playwright browser tools to navigate and interact with the actual site. DO NOT use web_search as a shortcut. web_search gives stale, generic info — browser gives LIVE, real-time data.
-2. NEVER stop after one action. You have 30 tool call rounds. A typical task takes 8-20 actions. Keep going until the goal is FULLY achieved.
-3. PLAN before you act. State your step-by-step plan, then execute each step.
-4. After each browser action, the system automatically shows you the current page state. Read it carefully to decide your next action.
-5. If a page element isn't visible, SCROLL to find it. If an action fails, try a different approach.
-
-## BROWSER TOOLS (Playwright MCP)
-- browser_navigate(url) — Go to a URL. Page state is automatically captured.
-- browser_click(element) — Click a link/button/tab. Target elements by their ref number from the page state.
-- browser_type(element, text) — Type text into an input field.
-- browser_press_key(key) — Press Enter, Tab, Escape, etc.
-- browser_scroll(direction) — Scroll "down" or "up" to reveal more content.
-- browser_select_option(element, values) — Select from dropdown menus.
-- browser_snapshot() — Manually request current page state (usually automatic).
-
-## HOW TO READ PAGE STATE
-After each action, you'll see "--- Current Page State ---" showing the accessibility tree:
-- Elements with [ref=N] can be targeted in browser_click/browser_type using that ref
-- Look for input fields, buttons, links, headings to understand the page
-- If you don't see what you need, scroll down
-
-## WORKFLOW
-1. State your plan: "I'll go to booking.com, search for [destination] on [dates], compare results"
-2. browser_navigate to the starting URL
-3. Read the page state → identify the element to interact with
-4. browser_click or browser_type on that element (use the ref number)
-5. Read the new page state → decide next action
-6. Repeat 3-5 until subtask is done
-7. Synthesize findings and present results OR continue to next site
-
-## WHEN TO USE WHAT
-| Task | Tool |
-|------|------|
-| Book hotels, compare prices, fill forms | Playwright browser tools |
-| Find which URL to start with | web_search (ONE call max, then switch to browser) |
-| Run scripts, file operations | execute_command |
-| Read a static article | read_webpage |
-
-## EXAMPLES OF WHAT YOU SHOULD DO
-- "Find hotel deals in San Diego" → Navigate to booking.com/kayak.com → fill search → read results → compare
-- "Fill out this form" → Navigate to URL → snapshot form → fill each field → submit
-- "Buy the cheapest flight" → Navigate to google flights → enter route/dates → read results → present options
-- "Check my order status" → Navigate to the site → find order tracking → enter details → read status
-
-## NEVER DO THIS
-- ❌ Use web_search to "find hotel prices" instead of actually visiting booking sites
-- ❌ Stop after navigating to a page without interacting with it
-- ❌ Say "I can't interact with websites" — you CAN and MUST
-- ❌ Give generic advice when you could take action and get real data`;
-    const { tools, guidance: routerGuidance } = agentMode
-      ? { tools: allTools, guidance: agentGuidance }
-      : selectTools(allTools, intents);
+    const tools = getEnabledTools(!!tavilyApiKey, driveReady, gmailReady);
     const toolNames = tools.map((t) => t.function.name);
 
-    const systemMessages = buildSystemMessages(get().pinnedDocs, toolNames, routerGuidance, content);
+    const systemMessages = buildSystemMessages(get().pinnedDocs, toolNames, undefined, content);
     const history = buildHistoryMessages(get().messages, excludeIds, ragResults, primaryModel.vision);
     const compactedHistory = await compactIfNeeded(systemMessages, history, primaryModel.id, apiKey);
     const apiMessages: ChatMessage[] = [...systemMessages, ...compactedHistory];
@@ -1106,37 +1044,6 @@ After each action, you'll see "--- Current Page State ---" showing the accessibi
               const msg = err instanceof Error ? err.message : "Command execution failed";
               results.push({ tool_call_id: tc.id, role: "tool", content: `Error: ${msg}` });
             }
-          } else if (tc.function.name.startsWith("mcp_")) {
-            // Route to MCP server
-            try {
-              const args = JSON.parse(tc.function.arguments);
-              let result = await useMcpStore.getState().callTool(tc.function.name, args);
-              // Clean web content from fetch/browse MCP tools
-              if (isWebContentTool(tc.function.name)) {
-                result = cleanWebContent(result);
-              }
-              results.push({ tool_call_id: tc.id, role: "tool", content: result });
-
-              // AUTO-SNAPSHOT: After any Playwright action that mutates page state,
-              // automatically capture and append the current page state so the model
-              // always has context for its next decision (observe-act-observe loop)
-              if (agentMode && tc.function.name.startsWith("mcp_playwright_") &&
-                  tc.function.name !== "mcp_playwright_browser_snapshot" &&
-                  !tc.function.name.includes("close")) {
-                try {
-                  let snapshot = await useMcpStore.getState().callTool("mcp_playwright_browser_snapshot", {});
-                  snapshot = cleanWebContent(snapshot);
-                  if (snapshot && snapshot.length > 20) {
-                    results[results.length - 1].content += `\n\n--- Current Page State ---\n${snapshot}`;
-                  }
-                } catch {
-                  // Snapshot failed (page still loading), skip silently
-                }
-              }
-            } catch (err) {
-              const msg = err instanceof Error ? err.message : "MCP tool call failed";
-              results.push({ tool_call_id: tc.id, role: "tool", content: `Error: ${msg}` });
-            }
           }
         }
         // Post-process: detect tool failures and append fallback instructions
@@ -1293,7 +1200,7 @@ After each action, you'll see "--- Current Page State ---" showing the accessibi
       },
       controller.signal,
       0,
-      agentMode ? 30 : 5,
+      5,
     );
   },
 
